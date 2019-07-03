@@ -4,7 +4,7 @@ namespace Libplanet.Net
 {
     /// <summary>
     /// The exception that is thrown when the version of the
-    /// <see cref="Peer" /> that <see cref="Swarm{T}" /> is trying to connect
+    /// <see cref="Protocols.Peer" /> that <see cref="Swarm{T}" /> is trying to connect
     /// to is different.
     /// </summary>
     [Serializable]
@@ -17,7 +17,7 @@ namespace Libplanet.Net
         /// <param name="expectedVersion">The protocol version of the current
         /// <see cref="Swarm{T}"/>.</param>
         /// <param name="actualVersion">The protocol version of the
-        /// <see cref="Peer"/> that <see cref="Swarm{T}" /> is trying to connect
+        /// <see cref="Protocols.Peer"/> that <see cref="Swarm{T}" /> is trying to connect
         /// to.</param>
         /// <param name="message">Specifies an <see cref="Exception.Message"/>.
         /// </param>
@@ -38,7 +38,7 @@ namespace Libplanet.Net
         public int ExpectedVersion { get; }
 
         /// <summary>
-        /// The protocol version of the <see cref="Peer"/> that the
+        /// The protocol version of the <see cref="Protocols.Peer"/> that the
         /// <see cref="Swarm{T}" /> is trying to connect to.
         /// </summary>
         public int ActualVersion { get; }

@@ -2,10 +2,11 @@ using System;
 using System.Diagnostics.Contracts;
 using System.Net;
 using System.Runtime.Serialization;
+using System.Runtime.Serialization.Formatters.Binary;
 using Libplanet.Crypto;
 using Libplanet.Serialization;
 
-namespace Libplanet.Net
+namespace Libplanet.Net.Protocols
 {
     /// <summary>
     /// A representation of peer node.
@@ -59,6 +60,12 @@ namespace Libplanet.Net
                        throw new ArgumentNullException(nameof(endPoint));
             AppProtocolVersion = appProtocolVersion;
             PublicIPAddress = publicIPAddress;
+        }
+
+        internal Peer(byte[] bytes)
+        {
+            string s = bytes.ToString();
+            s.Split('/');
         }
 
         protected Peer(SerializationInfo info, StreamingContext context)
