@@ -1,17 +1,22 @@
 using System.Collections.Generic;
+using System.Linq;
 using NetMQ;
 
 namespace Libplanet.Net.Messages
 {
     internal class Ping : Message
     {
-        public Ping()
+        public Ping(byte[] echo)
         {
+            Echo = echo;
         }
 
         public Ping(NetMQFrame[] body)
         {
+            Echo = body[0].ToByteArray();
         }
+
+        public byte[] Echo { get; }
 
         protected override MessageType Type => MessageType.Ping;
 
@@ -19,7 +24,7 @@ namespace Libplanet.Net.Messages
         {
             get
             {
-                yield break;
+                yield return new NetMQFrame(Echo);
             }
         }
     }

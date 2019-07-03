@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using Libplanet.Crypto;
+using Libplanet.Net.Protocols;
 using NetMQ;
 
 namespace Libplanet.Net.Messages
@@ -19,11 +21,6 @@ namespace Libplanet.Net.Messages
             /// Reply of `Ping`.
             /// </summary>
             Pong = 0x02,
-
-            /// <summary>
-            /// Peer's delta set to sync peer list.
-            /// </summary>
-            PeerSetDelta = 0x03,
 
             /// <summary>
             /// Request to query block hashes.
@@ -59,9 +56,23 @@ namespace Libplanet.Net.Messages
             /// Message containing serialized transaction.
             /// </summary>
             Tx = 0x10,
+
+            /// <summary>
+            /// Message containing request for nearby peers.
+            /// </summary>
+            FindPeer = 0x11,
+
+            /// <summary>
+            /// Message containing nearby peers.
+            /// </summary>
+            Neighbours = 0x12,
         }
 
         public byte[] Identity { get; set; }
+
+        public Peer Remote { get; set; }
+
+        public int Level { get; set;  }
 
         protected abstract MessageType Type { get; }
 
@@ -74,11 +85,15 @@ namespace Libplanet.Net.Messages
                 throw new ArgumentException("Can't parse empty NetMQMessage.");
             }
 
-            // (reply == true)  [type, sign, pubkey, frames...]
-            // (reply == false) [identity, type, sign, pubkey, frames...]
-            int headerCount = reply ? 3 : 4;
-            var rawType = (MessageType)raw[headerCount - 3].ConvertToInt32();
-            var publicKey = new PublicKey(raw[headerCount - 2].ToByteArray());
+            // (reply == true)  [type, pubkey, host, port, level, sign, frames...]
+            // (reply == false) [identity, type, pubkey, host, port, level, sign, frames...]
+            int headerCount = reply ? 6 : 7;
+            MessageType rawType = (MessageType)raw[headerCount - 6].ConvertToInt32();
+            PublicKey publicKey = new PublicKey(raw[headerCount - 5].ToByteArray());
+            DnsEndPoint endPoint = new DnsEndPoint(
+                raw[headerCount - 4].ConvertToString(),
+                raw[headerCount - 3].ConvertToInt32());
+            int level = raw[headerCount - 2].ConvertToInt32();
             byte[] signature = raw[headerCount - 1].ToByteArray();
 
             NetMQFrame[] body = raw.Skip(headerCount).ToArray();
@@ -90,11 +105,10 @@ namespace Libplanet.Net.Messages
                 );
             }
 
-            var types = new Dictionary<MessageType, Type>
+            Dictionary<MessageType, Type> types = new Dictionary<MessageType, Type>
             {
                 { MessageType.Ping, typeof(Ping) },
                 { MessageType.Pong, typeof(Pong) },
-                { MessageType.PeerSetDelta, typeof(PeerSetDelta) },
                 { MessageType.GetBlockHashes, typeof(GetBlockHashes) },
                 { MessageType.BlockHashes, typeof(BlockHashes) },
                 { MessageType.TxIds, typeof(TxIds) },
@@ -102,6 +116,8 @@ namespace Libplanet.Net.Messages
                 { MessageType.GetTxs, typeof(GetTxs) },
                 { MessageType.Blocks, typeof(Blocks) },
                 { MessageType.Tx, typeof(Tx) },
+                { MessageType.FindPeer, typeof(FindPeer) },
+                { MessageType.Neighbours, typeof(Neighbours) },
             };
 
             if (!types.TryGetValue(rawType, out Type type))
@@ -110,9 +126,11 @@ namespace Libplanet.Net.Messages
                     $"Can't determine NetMQMessage. [type: {rawType}]");
             }
 
-            var message = (Message)Activator.CreateInstance(
+            Message message = (Message)Activator.CreateInstance(
                 type, new[] { body });
 
+            message.Remote = new Peer(publicKey, endPoint);
+            message.Level = level;
             if (!reply)
             {
                 message.Identity = raw[0].Buffer.ToArray();
@@ -121,9 +139,15 @@ namespace Libplanet.Net.Messages
             return message;
         }
 
-        public NetMQMessage ToNetMQMessage(PrivateKey key)
+        public NetMQMessage ToNetMQMessage(PrivateKey key, DnsEndPoint endPoint, int level)
         {
-            var message = new NetMQMessage();
+            if (endPoint is null)
+            {
+                throw new InvalidMessageException(
+                    "Can't make message from unbound Swarm.");
+            }
+
+            NetMQMessage message = new NetMQMessage();
 
             // Write body (by concrete class)
             foreach (NetMQFrame frame in DataFrames)
@@ -133,6 +157,9 @@ namespace Libplanet.Net.Messages
 
             // Write headers. (inverse order)
             message.Push(key.Sign(message.ToByteArray()));
+            message.Push(level);
+            message.Push(endPoint.Port);
+            message.Push(endPoint.Host);
             message.Push(key.PublicKey.Format(true));
             message.Push((byte)Type);
 

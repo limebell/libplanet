@@ -12,7 +12,7 @@ namespace Libplanet.Net
         public int ExpectedVersion { get; set; }
 
         /// <summary>
-        /// The protocol version of the <see cref="Peer"/> that the
+        /// The protocol version of the <see cref="Protocols.Peer"/> that the
         /// <see cref="Swarm{T}" /> is trying to connect to.
         /// </summary>
         public int ActualVersion { get; set; }
