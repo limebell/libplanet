@@ -423,7 +423,7 @@ namespace Libplanet.Net
             {
                 try
                 {
-                    _protocol.Bootstrap(bootstrapPeers.ToList());
+                    await _protocol.BootstrapAsync(bootstrapPeers.ToList());
                 }
                 catch (Exception e)
                 {
@@ -501,22 +501,91 @@ namespace Libplanet.Net
             return dealer;
         }
 
-        internal void SendMessage(Peer peer, Message message)
+        internal async Task SendMessageWithReplyAsync(Peer peer, Message message)
         {
-            switch (message)
+            Message reply = await SendMessageAsync(peer, message);
+            if (reply is null)
             {
-                case Ping ping:
-                    {
-                        Task.Run(async () => await SendPingAsync(peer, ping));
-                        break;
-                    }
-
-                case FindPeer findPeer:
-                    {
-                        SendFindPeerAsync(peer, findPeer);
-                        break;
-                    }
+                _logger.Debug($"Reply is null {message}");
             }
+            else
+            {
+                switch (reply)
+                {
+                    case Pong pong:
+                        _logger.Debug($"Received pong from [{peer.Address.ToHex()}]");
+                        await _protocol.RecvPongAsync(pong.Remote, pong.Echoed);
+                        break;
+
+                    case Neighbours neighbours:
+                        _logger.Debug($"Received neighbours from [{peer.Address.ToHex()}]");
+                        await _protocol.RecvNeighboursAsync(neighbours.Remote, neighbours.Found);
+                        break;
+
+                    default:
+                        throw new InvalidMessageException(
+                            $"The reply of message is unexpected type. " +
+                            $"but {reply}");
+                }
+            }
+        }
+
+        internal async Task<Message> SendMessageAsync(Peer peer, Message message)
+        {
+            DealerSocket dealer = await GetDealerSocket(peer);
+
+            try
+            {
+                _logger.Debug($"Trying to Send Message ({peer.EndPoint})...");
+
+                string address = ToNetMQAddress(peer);
+
+                dealer.Connect(address);
+
+                _logger.Debug($"Trying to Send Message to [{address}]...");
+                dealer.SendMultipartMessage(message.ToNetMQMessage(_privateKey, EndPoint, -1));
+
+                _logger.Debug($"Waiting for Reply from [{address}]...");
+                NetMQMessage reply = dealer.ReceiveMultipartMessage();
+
+                if (message is Pong pong && pong.AppProtocolVersion != _appProtocolVersion)
+                {
+                    dealer.Dispose();
+
+                    DifferentProtocolVersionEventArgs args =
+                        new DifferentProtocolVersionEventArgs
+                        {
+                            ExpectedVersion = _appProtocolVersion,
+                            ActualVersion = pong.AppProtocolVersion,
+                        };
+
+                    DifferentVersionPeerEncountered?.Invoke(this, args);
+
+                    throw new DifferentAppProtocolVersionException(
+                        $"Peer protocol version is different.",
+                        _appProtocolVersion,
+                        pong.AppProtocolVersion);
+                }
+
+                _dealers[peer.Address] = dealer;
+                return Message.Parse(reply, true);
+            }
+            catch (IOException)
+            {
+                dealer.Dispose();
+                throw;
+            }
+            catch (TimeoutException)
+            {
+                dealer.Dispose();
+                throw;
+            }
+            catch (Exception e)
+            {
+                _logger.Debug($"Unexpected exception. [{e}]");
+            }
+
+            return null;
         }
 
         internal void ReplyMessage(Message message)
@@ -662,131 +731,6 @@ namespace Libplanet.Net
             });
         }
 
-        private async Task SendPingAsync(Peer peer, Ping ping)
-        {
-            DealerSocket dealer = await GetDealerSocket(peer);
-
-            try
-            {
-                _logger.Debug($"Trying to Ping({peer.EndPoint})...");
-
-                string address = ToNetMQAddress(peer);
-
-                dealer.Connect(address);
-
-                _logger.Debug($"Trying to Ping to [{address}]...");
-                dealer.SendMultipartMessage(ping.ToNetMQMessage(_privateKey, EndPoint, -1));
-
-                _logger.Debug($"Waiting for Pong from [{address}]...");
-                NetMQMessage message = dealer.ReceiveMultipartMessage();
-
-                Message parsedMessage = Message.Parse(message, true);
-                Pong pong;
-                if (parsedMessage is Pong p)
-                {
-                    _logger.Debug($"Pong received. from [{p.Remote.Address.ToHex()}]");
-                    _protocol.RecvPong(p.Remote, p.Echoed);
-                    pong = p;
-                }
-                else
-                {
-                    throw new InvalidMessageException(
-                        $"The response of Ping isn't Pong. " +
-                        $"but {parsedMessage}");
-                }
-
-                _logger.Debug($"Pong received({peer.EndPoint}) is complete.");
-
-                if (pong.AppProtocolVersion != _appProtocolVersion)
-                {
-                    dealer.Dispose();
-
-                    DifferentProtocolVersionEventArgs args =
-                        new DifferentProtocolVersionEventArgs
-                        {
-                            ExpectedVersion = _appProtocolVersion,
-                            ActualVersion = pong.AppProtocolVersion,
-                        };
-
-                    DifferentVersionPeerEncountered?.Invoke(this, args);
-
-                    throw new DifferentAppProtocolVersionException(
-                        $"Peer protocol version is different.",
-                        _appProtocolVersion,
-                        pong.AppProtocolVersion);
-                }
-
-                _dealers[peer.Address] = dealer;
-            }
-            catch (IOException)
-            {
-                dealer.Dispose();
-                throw;
-            }
-            catch (TimeoutException)
-            {
-                dealer.Dispose();
-                throw;
-            }
-            catch (Exception e)
-            {
-                _logger.Debug($"Unexpected exception. [{e}]");
-            }
-        }
-
-        private async void SendFindPeerAsync(Peer peer, FindPeer findPeer)
-        {
-            DealerSocket dealer = await GetDealerSocket(peer);
-
-            try
-            {
-                _logger.Debug($"Trying to send FindPeer to({peer.EndPoint})...");
-
-                string address = ToNetMQAddress(peer);
-
-                dealer.Connect(address);
-
-                _logger.Debug($"Trying to send FindPeer to [{address}]...");
-                await dealer.SendMultipartMessageAsync(
-                    findPeer.ToNetMQMessage(_privateKey, EndPoint, -1),
-                    cancellationToken: _cancellationToken);
-
-                _logger.Debug($"Waiting for Neighbours from [{address}]...");
-                NetMQMessage message = await dealer.ReceiveMultipartMessageAsync(
-                    timeout: _dialTimeout,
-                    cancellationToken: _cancellationToken);
-
-                Message parsedMessage = Message.Parse(message, true);
-                Neighbours neighbours;
-                if (parsedMessage is Neighbours n)
-                {
-                    _logger.Debug($"Neighbours received. [{n}]");
-                    _protocol.RecvNeighbours(n.Remote, n.Found);
-                    neighbours = n;
-                }
-                else
-                {
-                    throw new InvalidMessageException(
-                        $"The response of FindPeer isn't Neighbours. " +
-                        $"but {parsedMessage}");
-                }
-
-                _logger.Debug($"Neighbours received({peer.EndPoint}) is complete.");
-
-                _dealers[peer.Address] = dealer;
-            }
-            catch (IOException)
-            {
-                dealer.Dispose();
-                throw;
-            }
-            catch (TimeoutException)
-            {
-                dealer.Dispose();
-                throw;
-            }
-        }
-
         private async Task BindingProxies(CancellationToken cancellationToken)
         {
             while (!cancellationToken.IsCancellationRequested)
@@ -920,7 +864,7 @@ namespace Libplanet.Net
                 case Ping ping:
                     {
                         _logger.Debug($"Ping received.");
-                        _protocol.RecvPing(
+                        await _protocol.RecvPingAsync(
                             ping,
                             _appProtocolVersion,
                             _blockChain.Tip?.Index);
@@ -970,7 +914,7 @@ namespace Libplanet.Net
                 case FindPeer findPeer:
                     {
                         _logger.Debug($"FindPeer received. [{findPeer}]");
-                        _protocol.RecvFindPeer(findPeer);
+                        await _protocol.RecvFindPeerAsync(findPeer);
                         break;
                     }
 

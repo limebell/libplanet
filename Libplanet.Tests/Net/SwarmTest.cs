@@ -27,7 +27,7 @@ namespace Libplanet.Tests.Net
 {
     public class SwarmTest : IDisposable
     {
-        private const int Count = 30;
+        private const int Count = 20;
         private const int Timeout = 60 * 1000;
         private const int DisposeTimeout = 5 * 1000;
 
@@ -143,9 +143,65 @@ namespace Libplanet.Tests.Net
         }
 
         [Fact(Timeout = Timeout)]
+        public async Task SendMessage()
+        {
+            int size = 20;
+            Assert.True(size <= Count);
+            Message[] replies = new Message[size];
+
+            try
+            {
+                await Task.WhenAll(_swarms.Take(size).Select(s => StartAsync(s)));
+
+                for (int i = 1; i < size; i++)
+                {
+                    if (i % 2 == 0)
+                    {
+                        replies[i] = await _swarms[i].SendMessageAsync(
+                            _swarms[0].AsPeer,
+                            new Ping(new byte[1]));
+                    }
+                    else
+                    {
+                        replies[i] = await _swarms[i].SendMessageAsync(
+                            _swarms[0].AsPeer,
+                            new FindPeer(_swarms[0].Address));
+                    }
+                }
+            }
+            finally
+            {
+                for (int i = 0; i < size; i++)
+                {
+                    await _swarms[i].StopAsync();
+                }
+            }
+
+            for (int i = 1; i < size; i++)
+            {
+                Log.Debug($"Reply {i} is [{replies[i]}]");
+            }
+
+            for (int i = 1; i < size; i++)
+            {
+                Assert.NotNull(replies[i]);
+                if (i % 2 == 0)
+                {
+                    Assert.True(replies[i] is Pong);
+                }
+                else
+                {
+                    Assert.True(replies[i] is Neighbours);
+                }
+            }
+        }
+
+        [Fact(Timeout = Timeout)]
         public async Task Ping()
         {
-            int size = 10;
+            int size = 20;
+
+            Assert.True(size <= Count);
 
             try
             {
@@ -154,14 +210,8 @@ namespace Libplanet.Tests.Net
                 KademliaProtocol<DumbAction> kp =
                     (KademliaProtocol<DumbAction>)_swarms[0]._protocol;
 
-                for (int i = 1; i < size; i++)
-                {
-                    kp.Ping(_swarms[i].AsPeer);
-
-                    // await Task.Delay(1500);
-                }
-
-                await Task.Delay(15000);
+                await Task.WhenAll(_swarms.Skip(1).Take(size - 1)
+                    .Select(s => Task.Run(() => kp.PingAsync(s.AsPeer).Wait())));
             }
             finally
             {
@@ -251,22 +301,33 @@ namespace Libplanet.Tests.Net
         [Fact(Timeout = Timeout)]
         public async Task BootstrapMany()
         {
-            int size = 5;
+            int size = 20;
 
             Assert.True(size <= Count);
 
             try
             {
-                for (int i = 0; i < size; i++)
-                {
-                    await StartAsync(_swarms[i]);
-                }
+                await Task.WhenAll(_swarms.Take(size).Select(s => StartAsync(s)));
+
+                /*await Task.WhenAll(_swarms.Skip(1).Take(size - 1)
+                    .Select(s => Task.Run(() => s.BootstrapAsync(
+                        new List<Peer> { _swarms[0].AsPeer }).Wait())));*/
+
+                KademliaProtocol<DumbAction> kp =
+                    (KademliaProtocol<DumbAction>)_swarms[0]._protocol;
 
                 for (int i = 1; i < size; i++)
                 {
-                    await _swarms[i].BootstrapAsync(new List<Peer> { _swarms[0].AsPeer });
-                    await Task.Delay(1000);
+                    _swarms[i].BootstrapAsync(new List<Peer>() { _swarms[0].AsPeer }).Wait();
                 }
+
+                /*
+                for (int i = 1; i < size - 1; i++)
+                {
+                    kp.PingAsync(_swarms[i].AsPeer).Wait();
+                }
+
+                _swarms[size - 1].BootstrapAsync(new List<Peer>() { _swarms[0].AsPeer }).Wait();*/
             }
             finally
             {
@@ -296,10 +357,7 @@ namespace Libplanet.Tests.Net
                 Log.Debug($"Which are : {peerList.TrimEnd(new char[] { ' ', ',' })}");
             }
 
-            for (int i = 0; i < size; i++)
-            {
-                Assert.Equal(size - 1, _swarms[i].Peers.Count);
-            }
+            Assert.Equal(size - 1, _swarms[size - 1].Peers.Count);
         }
 
         [Fact(Timeout = Timeout)]
