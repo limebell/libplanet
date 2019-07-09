@@ -12,16 +12,16 @@ namespace Libplanet.Net.Protocols
 
         ImmutableList<Peer> Peers { get; }
 
-        void Bootstrap(List<Peer> bootstrapPeers);
+        Task BootstrapAsync(List<Peer> bootstrapPeers);
 
-        void Update(Peer peer, string pid);
+        Task UpdateAsync(Peer peer, string pid);
 
-        void RecvPing(Ping ping, int appProtocolVersion, long? tipIndex);
+        Task RecvPingAsync(Ping ping, int appProtocolVersion, long? tipIndex);
 
-        void RecvPong(Peer remote, byte[] echoed);
+        Task RecvPongAsync(Peer remote, byte[] echoed);
 
-        void RecvNeighbours(Peer remote, List<Peer> neighbours);
+        Task RecvNeighboursAsync(Peer remote, List<Peer> neighbours);
 
-        void RecvFindPeer(FindPeer findPeer);
+        Task RecvFindPeerAsync(FindPeer findPeer);
     }
 }
