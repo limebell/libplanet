@@ -1366,9 +1366,7 @@ namespace Libplanet.Net
                 _logger.Debug($"The message[{message}] has parsed.");
 
                 // it's still async because some method it relies are async yet.
-                Task.Run(
-                    async () => { await ProcessMessageAsync(message, _cancellationToken); },
-                    _cancellationToken);
+                _ = ProcessMessageAsync(message, _cancellationToken);
             }
             catch (InvalidMessageException ex)
             {
