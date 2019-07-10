@@ -98,13 +98,13 @@ namespace Libplanet.Net.Protocols
                 throw new ArgumentNullException(nameof(peer));
             }
 
-            int plength = GetCommonPrefixLength(peer, _thisPeer);
+            int index = GetBucketIndexOf(peer);
             Peer evicted;
 
             // lock required
             using (await _bucketMutex.LockAsync())
             {
-                evicted = _buckets[plength].AddPeer(peer);
+                evicted = _buckets[index].AddPeer(peer);
             }
 
             return evicted;
@@ -124,13 +124,13 @@ namespace Libplanet.Net.Protocols
                 throw new ArgumentNullException(nameof(peer));
             }
 
-            int plength = GetCommonPrefixLength(peer, _thisPeer);
+            int index = GetBucketIndexOf(peer);
             bool ret;
 
             // lock required
             using (await _bucketMutex.LockAsync())
             {
-                ret = _buckets[plength].RemovePeer(peer);
+                ret = _buckets[index].RemovePeer(peer);
             }
 
             return ret;
@@ -138,8 +138,8 @@ namespace Libplanet.Net.Protocols
 
         public KBucket BucketOf(Peer peer)
         {
-            int plength = GetCommonPrefixLength(_thisPeer, peer);
-            return BucketOf(plength);
+            int index = GetBucketIndexOf(peer);
+            return BucketOf(index);
         }
 
         public KBucket BucketOf(int level)
@@ -149,8 +149,8 @@ namespace Libplanet.Net.Protocols
 
         public bool Contains(Peer peer)
         {
-            int plength = GetCommonPrefixLength(_thisPeer, peer);
-            return _buckets[plength].Contains(peer);
+            int index = GetBucketIndexOf(peer);
+            return _buckets[index].Contains(peer);
         }
 
         public void Clear()
@@ -200,9 +200,9 @@ namespace Libplanet.Net.Protocols
             return peers;
         }
 
-        private int GetCommonPrefixLength(Peer a, Peer b)
+        private int GetBucketIndexOf(Peer peer)
         {
-            int plength = Kademlia.CommonPrefixLength(a, b);
+            int plength = Kademlia.CommonPrefixLength(peer, _thisPeer);
             return plength > _tableSize - 1 ? _tableSize - 1 : plength;
         }
     }
