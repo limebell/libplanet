@@ -237,6 +237,38 @@ namespace Libplanet.Tests.Net
         }
 
         [Fact(Timeout = Timeout)]
+        public async Task PingToClosedPeer()
+        {
+            Assert.True(2 <= Count);
+
+            try
+            {
+                await Task.WhenAll(_swarms.Take(2).Select(s => StartAsync(s)));
+
+                KademliaProtocol<DumbAction> kp =
+                    (KademliaProtocol<DumbAction>)_swarms[0]._protocol;
+
+                Peer peer = _swarms[1].AsPeer;
+                await kp.PingAsync(peer);
+
+                Assert.Contains(peer, _swarms[0].Peers);
+
+                await _swarms[1].StopAsync();
+                await kp.PingAsync(peer);
+
+                Assert.DoesNotContain(peer, _swarms[0].Peers);
+            }
+            finally
+            {
+                await _swarms[0].StopAsync();
+                if (_swarms[1].Running)
+                {
+                    await _swarms[1].StopAsync();
+                }
+            }
+        }
+
+        [Fact(Timeout = Timeout)]
         public async Task BootstrapSingle()
         {
             Swarm<DumbAction> a = _swarms[0];
@@ -301,7 +333,7 @@ namespace Libplanet.Tests.Net
         [Fact(Timeout = Timeout)]
         public async Task BootstrapMany()
         {
-            int size = 20;
+            int size = 10;
 
             Assert.True(size <= Count);
 
@@ -318,7 +350,7 @@ namespace Libplanet.Tests.Net
 
                 for (int i = 1; i < size; i++)
                 {
-                    _swarms[i].BootstrapAsync(new List<Peer>() { _swarms[0].AsPeer }).Wait();
+                    await _swarms[i].BootstrapAsync(new List<Peer>() { _swarms[0].AsPeer });
                 }
 
                 /*
@@ -342,13 +374,9 @@ namespace Libplanet.Tests.Net
                 string peerList = string.Empty;
                 for (int j = 0; j < size; j++)
                 {
-                    if (i == j)
-                    {
-                        continue;
-                    }
-
                     if (_swarms[i].Peers.Contains(_swarms[j].AsPeer))
                     {
+                        Assert.NotEqual(i, j);
                         peerList += j.ToString() + ", ";
                     }
                 }
@@ -356,6 +384,14 @@ namespace Libplanet.Tests.Net
                 Log.Debug($"Swarm [{i}] has peer: {_swarms[i].Peers.Count}");
                 Log.Debug($"Which are : {peerList.TrimEnd(new char[] { ' ', ',' })}");
             }
+
+            string whatttt = string.Empty;
+            foreach (Peer peer in _swarms[9].Peers)
+            {
+                whatttt += $"[{peer.Address.ToHex()}]";
+            }
+
+            Log.Debug($"swarm9 contains {whatttt}");
 
             Assert.Equal(size - 1, _swarms[size - 1].Peers.Count);
         }
