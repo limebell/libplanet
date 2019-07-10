@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
+using System.Threading.Tasks;
 using Libplanet.Crypto;
 using Libplanet.Net.Protocols;
 using Serilog;
@@ -27,7 +28,7 @@ namespace Libplanet.Tests.Net
         }
 
         [Fact(Timeout = Timeout)]
-        public void AddPeer()
+        public async Task AddPeerAsync()
         {
             Peer pa = new Peer(
                 new PrivateKey().PublicKey,
@@ -40,8 +41,8 @@ namespace Libplanet.Tests.Net
                 new DnsEndPoint("0.0.0.0", 1234));
 
             RoutingTable routing = new RoutingTable(pa, 1, 1, new Random());
-            routing.AddPeer(pb);
-            Peer candidate = routing.AddPeer(pc);
+            await routing.AddPeerAsync(pb);
+            Peer candidate = await routing.AddPeerAsync(pc);
 
             List<Peer> peers = new List<Peer>();
             foreach (KBucket bucket in routing.NoneEmptyBuckets)
@@ -56,7 +57,7 @@ namespace Libplanet.Tests.Net
         }
 
         [Fact(Timeout = Timeout)]
-        public void FindNeighbour()
+        public async Task FindNeighbourAsync()
         {
             Peer pa = new Peer(
                 new PrivateKey().PublicKey,
@@ -69,8 +70,8 @@ namespace Libplanet.Tests.Net
                 new DnsEndPoint("0.0.0.0", 1234));
 
             RoutingTable routing = new RoutingTable(pa, 160, 16, new Random());
-            routing.AddPeer(pb);
-            routing.AddPeer(pc);
+            await routing.AddPeerAsync(pb);
+            await routing.AddPeerAsync(pc);
 
             List<Peer> neighbours = routing.Neighbours(pa, 10).ToList();
 
