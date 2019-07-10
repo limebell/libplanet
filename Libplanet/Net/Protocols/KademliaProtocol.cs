@@ -72,8 +72,8 @@ namespace Libplanet.Net.Protocols
                 }
 
                 // FIXME: bootstrap peer is always valid? should check validity?
-                _routing.AddPeer(bootstrapPeer);
                 await DoFindPeerAsync(_thisPeer.Address, bootstrapPeer);
+                await _routing.AddPeerAsync(bootstrapPeer);
             }
 
             // should think of the way if bootstraping is done,
@@ -150,8 +150,8 @@ namespace Libplanet.Net.Protocols
                 }
             }
 
-            Peer evictionCandidate = _routing.AddPeer(peer);
             if (evictionCandidate is null)
+            Peer evictionCandidate = await _routing.AddPeerAsync(peer);
             {
                 // added successfully since there was empty space in bucket
                 Log.Debug($"Added [{peer.Address.ToHex()}] to [{_thisPeer.Address.ToHex()}]");
@@ -268,8 +268,7 @@ namespace Libplanet.Net.Protocols
             {
                 if (peer != _thisPeer)
                 {
-                    // tasks.Add(PingAsync(peer));
-                    _routing.AddPeer(peer);
+                    tasks.Add(PingAsync(peer));
                 }
             }
 

@@ -68,7 +68,7 @@ namespace Libplanet.Net.Protocols
             }
         }
 
-        public Peer AddPeer(Peer peer)
+        public async Task<Peer> AddPeerAsync(Peer peer)
         {
             if (peer == _thisPeer)
             {
@@ -78,14 +78,14 @@ namespace Libplanet.Net.Protocols
 
             if (peer is null)
             {
-                throw new ArgumentNullException(nameof(peer));
+                return null;
             }
 
             int plength = GetCommonPrefixLength(peer, _thisPeer);
             Peer evicted;
 
             // lock required
-            // using (await _bucketMutex.LockAsync())
+            using (await _bucketMutex.LockAsync())
             {
                 evicted = _buckets[plength].AddPeer(peer);
             }
@@ -93,7 +93,7 @@ namespace Libplanet.Net.Protocols
             return evicted;
         }
 
-        public bool RemovePeer(Peer peer)
+        public async Task<bool> RemovePeerAsync(Peer peer)
         {
             if (peer == _thisPeer)
             {
@@ -111,7 +111,7 @@ namespace Libplanet.Net.Protocols
             bool ret;
 
             // lock required
-            // using (await _bucketMutex.LockAsync())
+            using (await _bucketMutex.LockAsync())
             {
                 ret = _buckets[plength].RemovePeer(peer);
             }
