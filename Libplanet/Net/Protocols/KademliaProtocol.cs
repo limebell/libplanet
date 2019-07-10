@@ -27,7 +27,7 @@ namespace Libplanet.Net.Protocols
         private readonly RoutingTable _routing;
         private readonly ConcurrentDictionary<string, ExpectedPong> _expectedPongs;
         private readonly ConcurrentBag<string> _deletedPingids;
-        private readonly ConcurrentDictionary<Address, DateTimeOffset> _findRequests;
+        private readonly ConcurrentDictionary<Address, FindRequest> _findRequests;
 
         public KademliaProtocol(Swarm<T> swarm)
         {
@@ -38,7 +38,7 @@ namespace Libplanet.Net.Protocols
                 _thisPeer, TableSize, BucketSize, _random);
             _expectedPongs = new ConcurrentDictionary<string, ExpectedPong>();
             _deletedPingids = new ConcurrentBag<string>();
-            _findRequests = new ConcurrentDictionary<Address, DateTimeOffset>();
+            _findRequests = new ConcurrentDictionary<Address, FindRequest>();
         }
 
         public int Count => _routing.Count;
@@ -72,12 +72,14 @@ namespace Libplanet.Net.Protocols
                 }
 
                 // FIXME: bootstrap peer is always valid? should check validity?
-                await DoFindPeerAsync(_thisPeer.Address, bootstrapPeer);
                 await _routing.AddPeerAsync(bootstrapPeer);
+                _ = DoFindPeerAsync(_thisPeer.Address, bootstrapPeer);
             }
 
             // should think of the way if bootstraping is done,
             // in order to get closest peer for preloading in swarm
+            await Task.Delay((int)RequestTimeout);
+        }
 
         public async Task UpdateAsync()
         {
@@ -176,11 +178,11 @@ namespace Libplanet.Net.Protocols
             }
 
             // idle bucket refresh...
-            foreach (KeyValuePair<Address, DateTimeOffset> entry in _findRequests)
+            foreach (KeyValuePair<Address, FindRequest> entry in _findRequests)
             {
-                if (DateTimeOffset.UtcNow > entry.Value)
+                if (DateTimeOffset.UtcNow > entry.Value.Timeout)
                 {
-                    _findRequests.TryRemove(entry.Key, out DateTimeOffset timeout);
+                    _findRequests.TryRemove(entry.Key, out FindRequest findRequest);
                 }
             }
         }
@@ -243,10 +245,12 @@ namespace Libplanet.Net.Protocols
                 }
             }
 
-            foreach (KeyValuePair<Address, DateTimeOffset> entry in _findRequests)
+            foreach (KeyValuePair<Address, FindRequest> entry in _findRequests)
             {
-                if (DateTimeOffset.UtcNow > entry.Value)
+                if (DateTimeOffset.UtcNow > entry.Value.Timeout)
                 {
+                    Log.Debug($"Neighbours from [{remote.Address.ToHex()}] " +
+                        $"TimeOut at [{_thisPeer.Address.ToHex()}]");
                     continue;
                 }
 
@@ -257,13 +261,16 @@ namespace Libplanet.Net.Protocols
                 Peer closest_known = closest_candidate.Count == 0 ? null : closest_candidate[0];
                 for (int i = 0; i < FindConcurrency && i < peers.Count; i++)
                 {
-                    if (
-                        closest_known is null ||
+                    if ((closest_known is null ||
                         string.Compare(
                             Kademlia.CalculateDistance(peers[i].Address, entry.Key).ToHex(),
                             Kademlia.CalculateDistance(closest_known.Address, entry.Key).ToHex()
-                        ) < 1)
+                        ) < 1) &&
+                        !entry.Value.Sent.Contains(peers[i]))
                     {
+                        // This prevents sending find request again to same peer
+                        // FIXME: this is required? not contained in original implementation
+                        entry.Value.Sent.Add(peers[i]);
                         _ = SendFindPeerAsync(peers[i], entry.Key);
                     }
                 }
@@ -310,8 +317,8 @@ namespace Libplanet.Net.Protocols
 
         private async Task DoFindPeerAsync(Address target, Peer viaPeer = null)
         {
-            _findRequests[target] =
-                DateTimeOffset.UtcNow + TimeSpan.FromMilliseconds(RequestTimeout);
+            _findRequests[target] = new FindRequest(
+                DateTimeOffset.UtcNow + TimeSpan.FromMilliseconds(RequestTimeout));
             if (viaPeer is null)
             {
                 await QueryNeighboursAsync(target);
@@ -370,7 +377,7 @@ namespace Libplanet.Net.Protocols
         }
 
         // expected pong data type.
-        // this contiains time out for ping, pinged target
+        // this contiains timeout for ping, pinged target
         // and replacement candidate(LRU peer).
         [Serializable]
         private struct ExpectedPong
@@ -387,6 +394,23 @@ namespace Libplanet.Net.Protocols
             public Peer Target { get; }
 
             public Peer Replacement { get; }
+        }
+
+        // find request data type.
+        // this contains timeout for a find request
+        // and peers that already sent this request to
+        [Serializable]
+        private struct FindRequest
+        {
+            public FindRequest(DateTimeOffset timeout)
+            {
+                Timeout = timeout;
+                Sent = new List<Peer>();
+            }
+
+            public DateTimeOffset Timeout { get; }
+
+            public List<Peer> Sent { get; }
         }
     }
 }
