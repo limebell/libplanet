@@ -536,6 +536,11 @@ namespace Libplanet.Net
 
         internal async Task<Message> SendMessageAsync(Peer peer, Message message)
         {
+            if (peer is null)
+            {
+                throw new ArgumentNullException(nameof(peer));
+            }
+
             DealerSocket dealer = await GetDealerSocket(peer);
 
             try
