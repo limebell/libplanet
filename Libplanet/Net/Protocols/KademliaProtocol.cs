@@ -48,7 +48,7 @@ namespace Libplanet.Net.Protocols
             get
             {
                 List<Peer> peers = new List<Peer>();
-                foreach (KBucket bucket in _routing.NoneEmptyBuckets)
+                foreach (KBucket bucket in _routing.NonEmptyBuckets)
                 {
                     peers.AddRange(bucket.Peers);
                 }
@@ -151,25 +151,28 @@ namespace Libplanet.Net.Protocols
             if (pingid != null && _expectedPongs.ContainsKey(pingid))
             {
                 _expectedPongs.TryRemove(pingid, out ExpectedPong ep);
-                if (!(ep.Replacement is null))
+                if (ep.Replacement != null)
                 {
                     _routing.BucketOf(ep.Replacement).ReplacementCache.Add(ep.Replacement);
                 }
             }
 
-            Peer evictionCandidate = await _routing.AddPeerAsync(peer);
-            if (evictionCandidate is null && peer != null)
+            if (peer != null)
             {
-                // added successfully since there was empty space in bucket
-                Log.Debug($"Added [{peer.Address.ToHex()}] to [{_thisPeer.Address.ToHex()}]");
-            }
-            else if (peer != null)
-            {
-                _ = PingAsync(evictionCandidate, peer);
-                Log.Debug("Eviction?");
+                Peer evictionCandidate = await _routing.AddPeerAsync(peer);
+                if (evictionCandidate is null)
+                {
+                    // added successfully since there was empty space in the bucket
+                    Log.Debug($"Added [{peer.Address.ToHex()}] to [{_thisPeer.Address.ToHex()}]");
+                }
+                else
+                {
+                    _ = PingAsync(evictionCandidate, peer);
+                    Log.Debug($"Evict peer [{evictionCandidate}]?");
+                }
             }
 
-            foreach (KBucket bucket in _routing.NoneEmptyBuckets)
+            foreach (KBucket bucket in _routing.NonFullBuckets)
             {
                 foreach (Peer replacement in bucket.ReplacementCache)
                 {
@@ -304,6 +307,11 @@ namespace Libplanet.Net.Protocols
 #pragma warning disable
         internal async Task PingAsync(Peer target, Peer replacement = null)
         {
+            if (target is null)
+            {
+                throw new ArgumentNullException(nameof(target));
+            }
+
             byte[] echoed = new SHA256CryptoServiceProvider()
                 .ComputeHash(Encoding.ASCII.GetBytes(_thisPeer.ToString() + DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()));
             Log.Debug($"Ping's echo: {ByteUtil.Hex(echoed)}, to [{target.Address.ToHex()}]");

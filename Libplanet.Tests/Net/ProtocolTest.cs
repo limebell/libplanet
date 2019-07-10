@@ -45,7 +45,7 @@ namespace Libplanet.Tests.Net
             Peer candidate = await routing.AddPeerAsync(pc);
 
             List<Peer> peers = new List<Peer>();
-            foreach (KBucket bucket in routing.NoneEmptyBuckets)
+            foreach (KBucket bucket in routing.NonEmptyBuckets)
             {
                 peers.AddRange(bucket.Peers);
             }
