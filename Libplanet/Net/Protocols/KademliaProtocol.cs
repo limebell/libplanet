@@ -78,6 +78,10 @@ namespace Libplanet.Net.Protocols
 
             // should think of the way if bootstraping is done,
             // in order to get closest peer for preloading in swarm
+
+        public async Task UpdateAsync()
+        {
+            await UpdateAsync(null);
         }
 
         // this updates routing table when receiving a message.
@@ -86,9 +90,10 @@ namespace Libplanet.Net.Protocols
         // is alive to determine evict LRU peer or discard remote peer.
         public async Task UpdateAsync(Peer peer, string pingid = null)
         {
-            if (peer is null)
+            if (peer is null && pingid != null)
             {
-                throw new ArgumentNullException(nameof(peer));
+                throw new ArgumentException(
+                    $"Argument {nameof(peer)} is null but has pingid [{pingid}].");
             }
 
             if (peer == _thisPeer)
@@ -97,7 +102,7 @@ namespace Libplanet.Net.Protocols
                     $"Argument {nameof(peer)} is equal to self.");
             }
 
-            if (!(pingid is null) && !_expectedPongs.ContainsKey(pingid))
+            if (pingid != null && !_expectedPongs.ContainsKey(pingid))
             {
                 if (_deletedPingids.Contains(pingid))
                 {
@@ -128,20 +133,20 @@ namespace Libplanet.Net.Protocols
                     // ping pong timeout
                     _deletedPingids.Add(entry.Key);
                     _expectedPongs.TryRemove(entry.Key, out ExpectedPong ep);
-                    _routing.RemovePeer(ep.Target);
-                    if (!(ep.Replacement is null))
+                    await _routing.RemovePeerAsync(ep.Target);
+                    if (ep.Replacement != null)
                     {
                         await UpdateAsync(ep.Replacement);
                     }
 
-                    if (ep.Target.Address.Equals(peer.Address))
+                    if (peer != null && ep.Target.Address.Equals(peer.Address))
                     {
                         return;
                     }
                 }
             }
 
-            if (!(pingid is null) && _expectedPongs.ContainsKey(pingid))
+            if (pingid != null && _expectedPongs.ContainsKey(pingid))
             {
                 _expectedPongs.TryRemove(pingid, out ExpectedPong ep);
                 if (!(ep.Replacement is null))
@@ -150,15 +155,15 @@ namespace Libplanet.Net.Protocols
                 }
             }
 
-            if (evictionCandidate is null)
             Peer evictionCandidate = await _routing.AddPeerAsync(peer);
+            if (evictionCandidate is null && peer != null)
             {
                 // added successfully since there was empty space in bucket
                 Log.Debug($"Added [{peer.Address.ToHex()}] to [{_thisPeer.Address.ToHex()}]");
             }
-            else
+            else if (peer != null)
             {
-                await PingAsync(evictionCandidate, peer);
+                _ = PingAsync(evictionCandidate, peer);
                 Log.Debug("Eviction?");
             }
 
@@ -166,7 +171,7 @@ namespace Libplanet.Net.Protocols
             {
                 foreach (Peer replacement in bucket.ReplacementCache)
                 {
-                    await PingAsync(replacement);
+                    _ = PingAsync(replacement);
                 }
             }
 
@@ -275,6 +280,8 @@ namespace Libplanet.Net.Protocols
             await Task.WhenAll(tasks);
         }
 
+        // FIXME: this method is not safe from amplification attack
+        // maybe ping/pong/ping/pong is required
         public async Task RecvFindPeerAsync(FindPeer findPeer)
         {
             await UpdateAsync(findPeer.Remote);
