@@ -16,12 +16,6 @@ namespace Libplanet.Net.Protocols
 
         Task UpdateAsync();
 
-        Task RecvPingAsync(Ping ping, int appProtocolVersion);
-
-        Task RecvPongAsync(Peer remote, byte[] echoed);
-
-        Task RecvNeighboursAsync(Peer remote, List<Peer> neighbours);
-
-        Task RecvFindPeerAsync(FindPeer findPeer);
+        Task RecvMessageAsync(Message message);
     }
 }

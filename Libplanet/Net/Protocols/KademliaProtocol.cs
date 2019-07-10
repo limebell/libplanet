@@ -22,6 +22,7 @@ namespace Libplanet.Net.Protocols
         private const int FindConcurrency = 3;
 
         private readonly Swarm<T> _swarm;
+        private readonly int _appProtocolVersion;
         private readonly Peer _thisPeer;
         private readonly System.Random _random;
         private readonly RoutingTable _routing;
@@ -29,9 +30,10 @@ namespace Libplanet.Net.Protocols
         private readonly ConcurrentBag<string> _deletedPingids;
         private readonly ConcurrentDictionary<Address, FindRequest> _findRequests;
 
-        public KademliaProtocol(Swarm<T> swarm)
+        public KademliaProtocol(Swarm<T> swarm, int appProtocolVersion)
         {
             _swarm = swarm;
+            _appProtocolVersion = appProtocolVersion;
             _thisPeer = _swarm.AsPeer;
             _random = new System.Random();
             _routing = new RoutingTable(
@@ -206,97 +208,31 @@ namespace Libplanet.Net.Protocols
             return peers;
         }
 
-        // send pong back to remode
-        public async Task RecvPingAsync(Ping ping, int appProtocolVersion)
+        public async Task RecvMessageAsync(Message message)
         {
-            Peer remote = ping.Remote;
-            if (remote == _thisPeer)
+            switch (message)
             {
-                throw new ArgumentException(
-                    "Cannot receive ping from self");
+                case Ping ping:
+                    await RecvPingAsync(ping.Remote, ping.Echo, ping.Identity);
+                    break;
+
+                case Pong pong:
+                    await RecvPongAsync(pong.Remote, pong.Echoed);
+                    break;
+
+                case FindPeer findPeer:
+                    await RecvFindPeerAsync(findPeer.Remote, findPeer.Target, findPeer.Identity);
+                    break;
+
+                case Neighbours neighbours:
+                    await RecvNeighboursAsync(neighbours.Remote, neighbours.Found);
+                    break;
+
+                default:
+                    throw new InvalidMessageException(
+                        $"The reply of message is unexpected type. " +
+                        $"but {message}");
             }
-
-            await UpdateAsync(remote);
-            SendPong(ping.Echo, appProtocolVersion, ping.Identity);
-        }
-
-        // receive pong
-        public async Task RecvPongAsync(Peer remote, byte[] echoed)
-        {
-            if (remote == _thisPeer)
-            {
-                throw new ArgumentException(
-                    "Cannot receive pong from self");
-            }
-
-            Log.Debug($"Pong's echo: {ByteUtil.Hex(echoed)}, from [{remote.Address.ToHex()}]");
-            string pingid = MakePingId(echoed, remote);
-
-            // update process required
-            await UpdateAsync(remote, pingid);
-        }
-
-        public async Task RecvNeighboursAsync(Peer remote, List<Peer> neighbours)
-        {
-            List<Peer> peers = new List<Peer>();
-            List<Task> tasks = new List<Task>();
-            foreach (Peer peer in neighbours)
-            {
-                if (peer != _thisPeer && !_routing.Contains(peer))
-                {
-                    peers.Add(peer);
-                }
-            }
-
-            foreach (KeyValuePair<Address, FindRequest> entry in _findRequests)
-            {
-                if (DateTimeOffset.UtcNow > entry.Value.Timeout)
-                {
-                    Log.Debug($"Neighbours from [{remote.Address.ToHex()}] " +
-                        $"TimeOut at [{_thisPeer.Address.ToHex()}]");
-                    continue;
-                }
-
-                Address target = entry.Key;
-                peers = Kademlia.SortByDistance(peers, entry.Key);
-
-                List<Peer> closest_candidate = _routing.Neighbours(target, BucketSize).ToList();
-                Peer closest_known = closest_candidate.Count == 0 ? null : closest_candidate[0];
-                for (int i = 0; i < FindConcurrency && i < peers.Count; i++)
-                {
-                    if ((closest_known is null ||
-                        string.Compare(
-                            Kademlia.CalculateDistance(peers[i].Address, entry.Key).ToHex(),
-                            Kademlia.CalculateDistance(closest_known.Address, entry.Key).ToHex()
-                        ) < 1) &&
-                        !entry.Value.Sent.Contains(peers[i]))
-                    {
-                        // This prevents sending find request again to same peer
-                        // FIXME: this is required? not contained in original implementation
-                        entry.Value.Sent.Add(peers[i]);
-                        _ = SendFindPeerAsync(peers[i], entry.Key);
-                    }
-                }
-            }
-
-            foreach (Peer peer in peers)
-            {
-                if (peer != _thisPeer)
-                {
-                    tasks.Add(PingAsync(peer));
-                }
-            }
-
-            await Task.WhenAll(tasks);
-        }
-
-        // FIXME: this method is not safe from amplification attack
-        // maybe ping/pong/ping/pong is required
-        public async Task RecvFindPeerAsync(FindPeer findPeer)
-        {
-            await UpdateAsync(findPeer.Remote);
-            List<Peer> found = _routing.Neighbours(findPeer.Target, BucketSize).ToList();
-            SendNeighbours(found, findPeer.Identity);
         }
 
         private string MakePingId(byte[] echoed, Peer peer)
@@ -357,10 +293,9 @@ namespace Libplanet.Net.Protocols
 
         private void SendPong(
             byte[] echoed,
-            int appProtocolVersion,
             byte[] identity)
         {
-            Pong pong = new Pong(appProtocolVersion, echoed)
+            Pong pong = new Pong(_appProtocolVersion, echoed)
             {
                 Identity = identity,
             };
@@ -381,6 +316,98 @@ namespace Libplanet.Net.Protocols
         {
             FindPeer findPeer = new FindPeer(target);
             await _swarm.SendMessageWithReplyAsync(addressee, findPeer);
+        }
+
+        // send pong back to remote
+        private async Task RecvPingAsync(Peer remote, byte[] echo, byte[] identity)
+        {
+            if (remote == _thisPeer)
+            {
+                throw new ArgumentException(
+                    "Cannot receive ping from self");
+            }
+
+            await UpdateAsync(remote);
+            SendPong(echo, identity);
+        }
+
+        // receive pong
+        private async Task RecvPongAsync(Peer remote, byte[] echoed)
+        {
+            if (remote == _thisPeer)
+            {
+                throw new ArgumentException(
+                    "Cannot receive pong from self");
+            }
+
+            Log.Debug($"Pong's echo: {ByteUtil.Hex(echoed)}, from [{remote.Address.ToHex()}]");
+            string pingid = MakePingId(echoed, remote);
+
+            // update process required
+            await UpdateAsync(remote, pingid);
+        }
+
+        private async Task RecvNeighboursAsync(Peer remote, List<Peer> found)
+        {
+            List<Peer> peers = new List<Peer>();
+            List<Task> tasks = new List<Task>();
+            foreach (Peer peer in found)
+            {
+                if (peer != _thisPeer && !_routing.Contains(peer))
+                {
+                    peers.Add(peer);
+                }
+            }
+
+            foreach (KeyValuePair<Address, FindRequest> entry in _findRequests)
+            {
+                if (DateTimeOffset.UtcNow > entry.Value.Timeout)
+                {
+                    Log.Debug($"Neighbours from [{remote.Address.ToHex()}] " +
+                        $"TimeOut at [{_thisPeer.Address.ToHex()}]");
+                    continue;
+                }
+
+                Address target = entry.Key;
+                peers = Kademlia.SortByDistance(peers, entry.Key);
+
+                List<Peer> closest_candidate = _routing.Neighbours(target, BucketSize).ToList();
+                Peer closest_known = closest_candidate.Count == 0 ? null : closest_candidate[0];
+                for (int i = 0; i < FindConcurrency && i < peers.Count; i++)
+                {
+                    if ((closest_known is null ||
+                        string.Compare(
+                            Kademlia.CalculateDistance(peers[i].Address, entry.Key).ToHex(),
+                            Kademlia.CalculateDistance(closest_known.Address, entry.Key).ToHex()
+                        ) < 1) &&
+                        !entry.Value.Sent.Contains(peers[i]))
+                    {
+                        // This prevents sending find request again to same peer
+                        // FIXME: this is required? not contained in original implementation
+                        entry.Value.Sent.Add(peers[i]);
+                        _ = SendFindPeerAsync(peers[i], entry.Key);
+                    }
+                }
+            }
+
+            foreach (Peer peer in peers)
+            {
+                if (peer != _thisPeer)
+                {
+                    tasks.Add(PingAsync(peer));
+                }
+            }
+
+            await Task.WhenAll(tasks);
+        }
+
+        // FIXME: this method is not safe from amplification attack
+        // maybe ping/pong/ping/pong is required
+        private async Task RecvFindPeerAsync(Peer remote, Address target, byte[] identity)
+        {
+            await UpdateAsync(remote);
+            List<Peer> found = _routing.Neighbours(target, BucketSize).ToList();
+            SendNeighbours(found, identity);
         }
 
         // expected pong data type.

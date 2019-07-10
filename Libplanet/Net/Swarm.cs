@@ -362,7 +362,7 @@ namespace Libplanet.Net
 
             try
             {
-                _protocol = new KademliaProtocol<T>(this);
+                _protocol = new KademliaProtocol<T>(this, _appProtocolVersion);
             }
             catch (Exception e)
             {
@@ -507,30 +507,7 @@ namespace Libplanet.Net
             }
             else
             {
-                switch (reply)
-                {
-                    case Pong pong:
-                        _logger.Debug($"Received pong from [{peer.Address.ToHex()}]");
-                        await _protocol.RecvPongAsync(pong.Remote, pong.Echoed);
-                        break;
-
-                    case Neighbours neighbours:
-                        string found = string.Empty;
-                        foreach (Peer foundPeer in neighbours.Found)
-                        {
-                            found += $"[{foundPeer.Address.ToHex()}]";
-                        }
-
-                        _logger.Debug($"Received {neighbours.Found.Count} neighbours from " +
-                            $"[{peer.Address.ToHex()}], are {found}");
-                        await _protocol.RecvNeighboursAsync(neighbours.Remote, neighbours.Found);
-                        break;
-
-                    default:
-                        throw new InvalidMessageException(
-                            $"The reply of message is unexpected type. " +
-                            $"but {reply}");
-                }
+                await _protocol.RecvMessageAsync(reply);
             }
         }
 
@@ -892,10 +869,7 @@ namespace Libplanet.Net
                 case Ping ping:
                     {
                         _logger.Debug($"Ping received.");
-                        await _protocol.RecvPingAsync(
-                            ping,
-                            _appProtocolVersion);
-                        _logger.Debug($"Pong was queued.");
+                        await _protocol.RecvMessageAsync(ping);
                         break;
                     }
 
@@ -940,7 +914,7 @@ namespace Libplanet.Net
                 case FindPeer findPeer:
                     {
                         _logger.Debug($"FindPeer received. [{findPeer}]");
-                        await _protocol.RecvFindPeerAsync(findPeer);
+                        await _protocol.RecvMessageAsync(findPeer);
                         break;
                     }
 
