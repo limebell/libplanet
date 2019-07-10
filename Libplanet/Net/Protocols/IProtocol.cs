@@ -14,7 +14,7 @@ namespace Libplanet.Net.Protocols
 
         Task BootstrapAsync(List<Peer> bootstrapPeers);
 
-        Task UpdateAsync(Peer peer, string pid);
+        Task UpdateAsync();
 
         Task RecvPingAsync(Ping ping, int appProtocolVersion, long? tipIndex);
 
