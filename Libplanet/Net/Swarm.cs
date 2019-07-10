@@ -430,9 +430,6 @@ namespace Libplanet.Net
                     throw e;
                 }
             }
-
-            // Should give certain time that ensures some connections are built
-            await Task.Delay(0);
         }
 
         public void BroadcastBlocks(IEnumerable<Block<T>> blocks)
@@ -518,7 +515,14 @@ namespace Libplanet.Net
                         break;
 
                     case Neighbours neighbours:
-                        _logger.Debug($"Received neighbours from [{peer.Address.ToHex()}]");
+                        string found = string.Empty;
+                        foreach (Peer foundPeer in neighbours.Found)
+                        {
+                            found += $"[{foundPeer.Address.ToHex()}]";
+                        }
+
+                        _logger.Debug($"Received {neighbours.Found.Count} neighbours from " +
+                            $"[{peer.Address.ToHex()}], are {found}");
                         await _protocol.RecvNeighboursAsync(neighbours.Remote, neighbours.Found);
                         break;
 
@@ -536,17 +540,34 @@ namespace Libplanet.Net
 
             try
             {
-                _logger.Debug($"Trying to Send Message ({peer.EndPoint})...");
-
                 string address = ToNetMQAddress(peer);
 
                 dealer.Connect(address);
 
-                _logger.Debug($"Trying to Send Message to [{address}]...");
+                _logger.Debug($"Trying to send [{message}] " +
+                    $"to [{peer.Address.ToHex()}({address})]...");
                 dealer.SendMultipartMessage(message.ToNetMQMessage(_privateKey, EndPoint, -1));
 
-                _logger.Debug($"Waiting for Reply from [{address}]...");
-                NetMQMessage reply = dealer.ReceiveMultipartMessage();
+                _logger.Debug($"Waiting for reply from [{peer.Address.ToHex()}({address})]...");
+
+                NetMQMessage reply = new NetMQMessage();
+
+                TimeSpan delayNotNull = TimeSpan.FromMilliseconds(100);
+                TimeSpan elapsed = TimeSpan.Zero;
+                while (!dealer.TryReceiveMultipartMessage(ref reply))
+                {
+                    Thread.Sleep(delayNotNull);
+
+                    elapsed += delayNotNull;
+
+                    if (elapsed > TimeSpan.FromMilliseconds(2000))
+                    {
+                        throw new TimeoutException(
+                            "No response in expected specified time: " +
+                            $"{2000}."
+                        );
+                    }
+                }
 
                 if (message is Pong pong && pong.AppProtocolVersion != _appProtocolVersion)
                 {
@@ -568,6 +589,7 @@ namespace Libplanet.Net
                 }
 
                 _dealers[peer.Address] = dealer;
+
                 return Message.Parse(reply, true);
             }
             catch (IOException)
@@ -577,12 +599,13 @@ namespace Libplanet.Net
             }
             catch (TimeoutException)
             {
+                await _protocol.UpdateAsync();
                 dealer.Dispose();
-                throw;
             }
             catch (Exception e)
             {
                 _logger.Debug($"Unexpected exception. [{e}]");
+                throw;
             }
 
             return null;
