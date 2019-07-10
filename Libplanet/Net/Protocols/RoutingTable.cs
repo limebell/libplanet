@@ -51,7 +51,24 @@ namespace Libplanet.Net.Protocols
             }
         }
 
-        public List<KBucket> NoneEmptyBuckets
+        public List<KBucket> NonFullBuckets
+        {
+            get
+            {
+                List<KBucket> buckets = new List<KBucket>();
+                foreach (KBucket bucket in _buckets)
+                {
+                    if (!bucket.IsFull())
+                    {
+                        buckets.Add(bucket);
+                    }
+                }
+
+                return buckets;
+            }
+        }
+
+        public List<KBucket> NonEmptyBuckets
         {
             get
             {
@@ -78,7 +95,7 @@ namespace Libplanet.Net.Protocols
 
             if (peer is null)
             {
-                return null;
+                throw new ArgumentNullException(nameof(peer));
             }
 
             int plength = GetCommonPrefixLength(peer, _thisPeer);
