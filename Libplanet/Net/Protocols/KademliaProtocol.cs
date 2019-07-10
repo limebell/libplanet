@@ -207,7 +207,7 @@ namespace Libplanet.Net.Protocols
         }
 
         // send pong back to remode
-        public async Task RecvPingAsync(Ping ping, int appProtocolVersion, long? tipIndex)
+        public async Task RecvPingAsync(Ping ping, int appProtocolVersion)
         {
             Peer remote = ping.Remote;
             if (remote == _thisPeer)
@@ -217,7 +217,7 @@ namespace Libplanet.Net.Protocols
             }
 
             await UpdateAsync(remote);
-            SendPong(ping.Echo, appProtocolVersion, tipIndex, ping.Identity);
+            SendPong(ping.Echo, appProtocolVersion, ping.Identity);
         }
 
         // receive pong
@@ -358,10 +358,9 @@ namespace Libplanet.Net.Protocols
         private void SendPong(
             byte[] echoed,
             int appProtocolVersion,
-            long? tipIndex,
             byte[] identity)
         {
-            Pong pong = new Pong(appProtocolVersion, tipIndex, echoed)
+            Pong pong = new Pong(appProtocolVersion, echoed)
             {
                 Identity = identity,
             };
