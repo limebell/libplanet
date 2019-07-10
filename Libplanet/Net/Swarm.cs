@@ -894,9 +894,7 @@ namespace Libplanet.Net
                         _logger.Debug($"Ping received.");
                         await _protocol.RecvPingAsync(
                             ping,
-                            _appProtocolVersion,
-                            _blockChain.Tip?.Index);
-
+                            _appProtocolVersion);
                         _logger.Debug($"Pong was queued.");
                         break;
                     }
