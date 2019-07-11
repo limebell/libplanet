@@ -58,7 +58,7 @@ namespace Libplanet.Net.Protocols
                 List<KBucket> buckets = new List<KBucket>();
                 foreach (KBucket bucket in _buckets)
                 {
-                    if (!bucket.IsFull())
+                    if (!bucket.Full())
                     {
                         buckets.Add(bucket);
                     }
@@ -75,7 +75,7 @@ namespace Libplanet.Net.Protocols
                 List<KBucket> buckets = new List<KBucket>();
                 foreach (KBucket bucket in _buckets)
                 {
-                    if (!bucket.IsEmpty())
+                    if (!bucket.Empty())
                     {
                         buckets.Add(bucket);
                     }
@@ -173,7 +173,7 @@ namespace Libplanet.Net.Protocols
             List<Peer> sorted = new List<Peer>();
             foreach (KBucket bucket in _buckets)
             {
-                if (bucket.IsEmpty())
+                if (bucket.Empty())
                 {
                     continue;
                 }
