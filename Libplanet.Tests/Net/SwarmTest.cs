@@ -72,7 +72,10 @@ namespace Libplanet.Tests.Net
 
             foreach (Swarm<DumbAction> s in _swarms)
             {
-                s.StopAsync().Wait(DisposeTimeout);
+                if (s.Running)
+                {
+                    s.StopAsync().Wait(DisposeTimeout);
+                }
             }
 
             NetMQConfig.Cleanup(false);
@@ -148,15 +151,15 @@ namespace Libplanet.Tests.Net
 
             try
             {
+                // await _swarms.Take(size).ParallelForEachAsync(async s => await StartAsync(s));
                 await Task.WhenAll(_swarms.Take(size).Select(s => StartAsync(s)));
-
                 KademliaProtocol<DumbAction> kp =
                     (KademliaProtocol<DumbAction>)_swarms[0]._protocol;
 
                 await Task.WhenAll(_swarms.Skip(1).Take(size - 1)
                     .Select(s => Task.Run(() => kp.PingAsync(s.AsPeer).Wait())));
 
-                await Task.Delay(1000);
+                await Task.Delay(5000);
             }
             finally
             {
@@ -195,11 +198,13 @@ namespace Libplanet.Tests.Net
 
                 Peer peer = _swarms[1].AsPeer;
                 await kp.PingAsync(peer);
+                await Task.Delay(300);
 
                 Assert.Contains(peer, _swarms[0].Peers);
 
                 await _swarms[1].StopAsync();
                 await kp.PingAsync(peer);
+                await Task.Delay(1500);
 
                 Assert.DoesNotContain(peer, _swarms[0].Peers);
             }
@@ -275,10 +280,10 @@ namespace Libplanet.Tests.Net
             Assert.Equal(2, c.Peers.Count);
         }
 
-        [Fact(Timeout = Timeout)]
+        [Fact(Timeout = 2 * Timeout)]
         public async Task BootstrapMany()
         {
-            int size = 10;
+            int size = 20;
 
             Assert.True(size <= Count);
 
@@ -286,27 +291,13 @@ namespace Libplanet.Tests.Net
             {
                 await Task.WhenAll(_swarms.Take(size).Select(s => StartAsync(s)));
 
-                /*await Task.WhenAll(_swarms.Skip(1).Take(size - 1)
+                await Task.WhenAll(_swarms.Skip(1).Take(size - 2)
                     .Select(s => Task.Run(() => s.BootstrapAsync(
-                        new List<Peer> { _swarms[0].AsPeer }).Wait())));*/
+                        new List<Peer> { _swarms[0].AsPeer }).Wait())));
 
-                KademliaProtocol<DumbAction> kp =
-                    (KademliaProtocol<DumbAction>)_swarms[0]._protocol;
-
-                for (int i = 1; i < size; i++)
-                {
-                    _ = _swarms[i].BootstrapAsync(new List<Peer>() { _swarms[0].AsPeer });
-                }
-
-                await Task.Delay(3000);
-
-                /*
-                for (int i = 1; i < size - 1; i++)
-                {
-                    kp.PingAsync(_swarms[i].AsPeer).Wait();
-                }
-
-                _swarms[size - 1].BootstrapAsync(new List<Peer>() { _swarms[0].AsPeer }).Wait();*/
+                await Task.Delay(1000);
+                await _swarms[size - 1].BootstrapAsync(new List<Peer> { _swarms[0].AsPeer });
+                await Task.Delay(1000);
             }
             finally
             {
