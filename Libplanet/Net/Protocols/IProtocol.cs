@@ -16,6 +16,6 @@ namespace Libplanet.Net.Protocols
 
         Task UpdateAsync();
 
-        Task RecvMessageAsync(Message message);
+        void ReceiveMessage(object sender, Message message);
     }
 }
