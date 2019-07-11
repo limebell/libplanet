@@ -72,7 +72,7 @@ namespace Libplanet.Net.Messages
 
         public Peer Remote { get; set; }
 
-        public int Level { get; set;  }
+        public int Level { get; set; }
 
         protected abstract MessageType Type { get; }
 
@@ -139,7 +139,7 @@ namespace Libplanet.Net.Messages
             return message;
         }
 
-        public NetMQMessage ToNetMQMessage(PrivateKey key, DnsEndPoint endPoint, int level)
+        public NetMQMessage ToNetMQMessage(PrivateKey key, DnsEndPoint endPoint)
         {
             if (endPoint is null)
             {
@@ -157,7 +157,7 @@ namespace Libplanet.Net.Messages
 
             // Write headers. (inverse order)
             message.Push(key.Sign(message.ToByteArray()));
-            message.Push(level);
+            message.Push(Level);
             message.Push(endPoint.Port);
             message.Push(endPoint.Host);
             message.Push(key.PublicKey.Format(true));
