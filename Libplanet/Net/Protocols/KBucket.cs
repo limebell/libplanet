@@ -49,7 +49,7 @@ namespace Libplanet.Net.Protocols
                 _peers.Add(peer);
                 return null;
             }
-            else if (IsFull())
+            else if (Full())
             {
                 return Head;
             }
@@ -76,12 +76,12 @@ namespace Libplanet.Net.Protocols
             return _peers.Remove(peer);
         }
 
-        public bool IsEmpty()
+        public bool Empty()
         {
             return _peers.Count == 0;
         }
 
-        public bool IsFull()
+        public bool Full()
         {
             return _peers.Count >= _size;
         }

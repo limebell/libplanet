@@ -5,6 +5,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Libplanet.Action;
 using Libplanet.Net.Messages;
@@ -29,11 +30,16 @@ namespace Libplanet.Net.Protocols
         private readonly ConcurrentDictionary<string, ExpectedPong> _expectedPongs;
         private readonly ConcurrentBag<string> _deletedPingids;
         private readonly ConcurrentDictionary<Address, FindRequest> _findRequests;
+        private readonly CancellationToken _cancellationToken;
 
-        public KademliaProtocol(Swarm<T> swarm, int appProtocolVersion)
+        public KademliaProtocol(
+            Swarm<T> swarm,
+            int appProtocolVersion,
+            CancellationToken cancellationToken)
         {
             _swarm = swarm;
             _appProtocolVersion = appProtocolVersion;
+            _cancellationToken = cancellationToken;
             _thisPeer = _swarm.AsPeer;
             _random = new System.Random();
             _routing = new RoutingTable(
@@ -73,14 +79,31 @@ namespace Libplanet.Net.Protocols
                     continue;
                 }
 
-                // FIXME: bootstrap peer is always valid? should check validity?
-                await _routing.AddPeerAsync(bootstrapPeer);
-                await DoFindPeerAsync(_thisPeer.Address, bootstrapPeer);
+                await PingAsync(bootstrapPeer, bootstrap: true);
             }
 
             // should think of the way if bootstraping is done,
             // in order to get closest peer for preloading in swarm
             await Task.Delay((int)RequestTimeout);
+        }
+
+        public async Task BroadcastMessageAsync(Message message)
+        {
+            int level = message.Level;
+            if (level == TableSize - 1)
+            {
+                return;
+            }
+
+            for (int i = level; i < TableSize; i++)
+            {
+                KBucket bucket = _routing.BucketOf(i);
+                if (!bucket.Empty())
+                {
+                    message.Level = i + 1;
+                    await _swarm.SendMessageAsync(bucket.GetRandomPeer(), message, false);
+                }
+            }
         }
 
         // this updates routing table when receiving a message.
@@ -99,6 +122,11 @@ namespace Libplanet.Net.Protocols
             {
                 throw new ArgumentException(
                     $"Argument {nameof(peer)} is equal to self.");
+            }
+
+            if (_cancellationToken.IsCancellationRequested)
+            {
+                return;
             }
 
             if (pingid != null && !_expectedPongs.ContainsKey(pingid))
@@ -127,7 +155,8 @@ namespace Libplanet.Net.Protocols
 
             foreach (KeyValuePair<string, ExpectedPong> entry in _expectedPongs)
             {
-                if (DateTimeOffset.UtcNow > entry.Value.Timeout)
+                if (entry.Value.Timeout != null &&
+                    DateTimeOffset.UtcNow > entry.Value.Timeout)
                 {
                     // ping pong timeout
                     _deletedPingids.Add(entry.Key);
@@ -151,6 +180,11 @@ namespace Libplanet.Net.Protocols
                 if (ep.Replacement != null)
                 {
                     _routing.BucketOf(ep.Replacement).ReplacementCache.Add(ep.Replacement);
+                }
+
+                if (ep.Bootstrap)
+                {
+                    await DoFindPeerAsync(_thisPeer.Address, ep.Target);
                 }
             }
 
@@ -187,22 +221,6 @@ namespace Libplanet.Net.Protocols
             }
         }
 
-        public List<Peer> PeersToBroadcast(int level)
-        {
-            List<Peer> peers = new List<Peer>();
-            if (level < 0 || level >= TableSize)
-            {
-                return null;
-            }
-
-            for (int i = level; i < TableSize; i++)
-            {
-                peers.Add(_routing.BucketOf(i).GetRandomPeer());
-            }
-
-            return peers;
-        }
-
         public void Timeout(object sender, Peer peer)
         {
             _ = UpdateAsync(null);
@@ -217,7 +235,7 @@ namespace Libplanet.Net.Protocols
                     break;
 
                 case Pong pong:
-                    ReceivePongAsync(pong.Remote, pong.Echoed).Wait();
+                    ReceivePongAsync(pong.Remote, pong.AppProtocolVersion, pong.Echoed).Wait();
                     break;
 
                 case FindPeer findPeer:
@@ -239,7 +257,7 @@ namespace Libplanet.Net.Protocols
         }
 
 #pragma warning disable
-        internal async Task PingAsync(Peer target, Peer replacement = null)
+        internal async Task PingAsync(Peer target, Peer replacement = null, bool bootstrap = false)
         {
             if (target is null)
             {
@@ -251,7 +269,7 @@ namespace Libplanet.Net.Protocols
             string pingid = MakePingId(echoed, target);
             DateTimeOffset timeout =
                 DateTimeOffset.UtcNow + TimeSpan.FromMilliseconds(RequestTimeout);
-            _expectedPongs[pingid] = new ExpectedPong(timeout, target, replacement);
+            _expectedPongs[pingid] = new ExpectedPong(timeout, target, replacement, bootstrap);
         }
 #pragma warning restore
 
@@ -333,7 +351,7 @@ namespace Libplanet.Net.Protocols
         }
 
         // receive pong
-        private async Task ReceivePongAsync(Peer remote, byte[] echoed)
+        private async Task ReceivePongAsync(Peer remote, int appProtocolVersion, byte[] echoed)
         {
             if (remote == _thisPeer)
             {
@@ -341,15 +359,22 @@ namespace Libplanet.Net.Protocols
                     "Cannot receive pong from self");
             }
 
-            Log.Debug($"Pong's echo: {ByteUtil.Hex(echoed)}, from [{remote.Address.ToHex()}]");
-            string pingid = MakePingId(echoed, remote);
+            Peer peer = new Peer(remote.PublicKey, remote.EndPoint, appProtocolVersion);
+
+            Log.Debug($"Pong's echo: {ByteUtil.Hex(echoed)}, from [{peer.Address.ToHex()}]");
+            string pingid = MakePingId(echoed, peer);
 
             // update process required
-            await UpdateAsync(remote, pingid);
+            await UpdateAsync(peer, pingid);
         }
 
         private async Task ReceiveNeighboursAsync(Peer remote, List<Peer> found)
         {
+            if (_cancellationToken.IsCancellationRequested)
+            {
+                return;
+            }
+
             List<Peer> peers = new List<Peer>();
             List<Task> tasks = new List<Task>();
             foreach (Peer peer in found)
@@ -376,6 +401,11 @@ namespace Libplanet.Net.Protocols
                 Peer closest_known = closest_candidate.Count == 0 ? null : closest_candidate[0];
                 for (int i = 0; i < FindConcurrency && i < peers.Count; i++)
                 {
+                    if (_cancellationToken.IsCancellationRequested)
+                    {
+                        return;
+                    }
+
                     if ((closest_known is null ||
                         string.Compare(
                             Kademlia.CalculateDistance(peers[i].Address, entry.Key).ToHex(),
@@ -417,18 +447,25 @@ namespace Libplanet.Net.Protocols
         [Serializable]
         private struct ExpectedPong
         {
-            public ExpectedPong(DateTimeOffset timeout, Peer target, Peer replacement)
+            public ExpectedPong(
+                DateTimeOffset timeout,
+                Peer target,
+                Peer replacement,
+                bool bootstrap)
             {
                 Timeout = timeout;
                 Target = target;
                 Replacement = replacement;
+                Bootstrap = bootstrap;
             }
 
-            public DateTimeOffset Timeout { get; }
+            public DateTimeOffset Timeout { get; set; }
 
             public Peer Target { get; }
 
             public Peer Replacement { get; }
+
+            public bool Bootstrap { get; }
         }
 
         // find request data type.
