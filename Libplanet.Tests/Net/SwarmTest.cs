@@ -75,10 +75,7 @@ namespace Libplanet.Tests.Net
                 s.StopAsync().Wait(DisposeTimeout);
             }
 
-            if (!(Type.GetType("Mono.Runtime") is null))
-            {
-                NetMQConfig.Cleanup(false);
-            }
+            NetMQConfig.Cleanup(false);
         }
 
         [Fact(Timeout = Timeout)]
@@ -143,60 +140,6 @@ namespace Libplanet.Tests.Net
         }
 
         [Fact(Timeout = Timeout)]
-        public async Task SendMessage()
-        {
-            int size = 20;
-            Assert.True(size <= Count);
-            Message[] replies = new Message[size];
-
-            try
-            {
-                await Task.WhenAll(_swarms.Take(size).Select(s => StartAsync(s)));
-
-                for (int i = 1; i < size; i++)
-                {
-                    if (i % 2 == 0)
-                    {
-                        replies[i] = await _swarms[i].SendMessageAsync(
-                            _swarms[0].AsPeer,
-                            new Ping(new byte[1]));
-                    }
-                    else
-                    {
-                        replies[i] = await _swarms[i].SendMessageAsync(
-                            _swarms[0].AsPeer,
-                            new FindPeer(_swarms[0].Address));
-                    }
-                }
-            }
-            finally
-            {
-                for (int i = 0; i < size; i++)
-                {
-                    await _swarms[i].StopAsync();
-                }
-            }
-
-            for (int i = 1; i < size; i++)
-            {
-                Log.Debug($"Reply {i} is [{replies[i]}]");
-            }
-
-            for (int i = 1; i < size; i++)
-            {
-                Assert.NotNull(replies[i]);
-                if (i % 2 == 0)
-                {
-                    Assert.True(replies[i] is Pong);
-                }
-                else
-                {
-                    Assert.True(replies[i] is Neighbours);
-                }
-            }
-        }
-
-        [Fact(Timeout = Timeout)]
         public async Task Ping()
         {
             int size = 20;
@@ -212,6 +155,8 @@ namespace Libplanet.Tests.Net
 
                 await Task.WhenAll(_swarms.Skip(1).Take(size - 1)
                     .Select(s => Task.Run(() => kp.PingAsync(s.AsPeer).Wait())));
+
+                await Task.Delay(1000);
             }
             finally
             {
@@ -350,8 +295,10 @@ namespace Libplanet.Tests.Net
 
                 for (int i = 1; i < size; i++)
                 {
-                    await _swarms[i].BootstrapAsync(new List<Peer>() { _swarms[0].AsPeer });
+                    _ = _swarms[i].BootstrapAsync(new List<Peer>() { _swarms[0].AsPeer });
                 }
+
+                await Task.Delay(3000);
 
                 /*
                 for (int i = 1; i < size - 1; i++)

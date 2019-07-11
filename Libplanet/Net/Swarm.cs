@@ -60,6 +60,7 @@ namespace Libplanet.Net
         private readonly NetMQQueue<Message> _replyQueue;
         private readonly NetMQQueue<Message> _broadcastQueue;
         private readonly NetMQPoller _poller;
+        private readonly NetMQPoller _replyPoller;
 
         private readonly ILogger _logger;
 
@@ -146,6 +147,7 @@ namespace Libplanet.Net
             _replyQueue = new NetMQQueue<Message>();
             _broadcastQueue = new NetMQQueue<Message>();
             _poller = new NetMQPoller { _router, _replyQueue, _broadcastQueue };
+            _replyPoller = new NetMQPoller();
 
             _receiveMutex = new AsyncLock();
             _blockSyncMutex = new AsyncLock();
@@ -195,6 +197,8 @@ namespace Libplanet.Net
         /// </summary>
         public event EventHandler<DifferentProtocolVersionEventArgs>
             DifferentVersionPeerEncountered;
+
+        private event EventHandler<Message> MessageReceived;
 
         public DnsEndPoint EndPoint { get; private set; }
 
@@ -276,6 +280,11 @@ namespace Libplanet.Net
                     if (_poller.IsRunning)
                     {
                         _poller.Dispose();
+                    }
+
+                    if (_replyPoller.IsRunning)
+                    {
+                        _replyPoller.Dispose();
                     }
 
                     _broadcastQueue.Dispose();
@@ -363,6 +372,7 @@ namespace Libplanet.Net
             try
             {
                 _protocol = new KademliaProtocol<T>(this, _appProtocolVersion);
+                MessageReceived += _protocol.ReceiveMessage;
             }
             catch (Exception e)
             {
@@ -388,6 +398,7 @@ namespace Libplanet.Net
                 {
                     // BroadcastTxAsync(broadcastTxInterval, _cancellationToken),
                     Task.Run(() => _poller.Run(), _cancellationToken),
+                    Task.Run(() => _replyPoller.Run(), _cancellationToken),
                 };
 
                 if (behindNAT)
@@ -500,19 +511,6 @@ namespace Libplanet.Net
 
         internal async Task SendMessageWithReplyAsync(Peer peer, Message message)
         {
-            Message reply = await SendMessageAsync(peer, message);
-            if (reply is null)
-            {
-                _logger.Debug($"Reply is null {message}");
-            }
-            else
-            {
-                await _protocol.RecvMessageAsync(reply);
-            }
-        }
-
-        internal async Task<Message> SendMessageAsync(Peer peer, Message message)
-        {
             if (peer is null)
             {
                 throw new ArgumentNullException(nameof(peer));
@@ -528,51 +526,11 @@ namespace Libplanet.Net
 
                 _logger.Debug($"Trying to send [{message}] " +
                     $"to [{peer.Address.ToHex()}({address})]...");
+
+                // Switch this statement to async is probably the best
                 dealer.SendMultipartMessage(message.ToNetMQMessage(_privateKey, EndPoint, -1));
-
-                _logger.Debug($"Waiting for reply from [{peer.Address.ToHex()}({address})]...");
-
-                NetMQMessage reply = new NetMQMessage();
-
-                TimeSpan delayNotNull = TimeSpan.FromMilliseconds(100);
-                TimeSpan elapsed = TimeSpan.Zero;
-                while (!dealer.TryReceiveMultipartMessage(ref reply))
-                {
-                    Thread.Sleep(delayNotNull);
-
-                    elapsed += delayNotNull;
-
-                    if (elapsed > TimeSpan.FromMilliseconds(2000))
-                    {
-                        throw new TimeoutException(
-                            "No response in expected specified time: " +
-                            $"{2000}."
-                        );
-                    }
-                }
-
-                if (message is Pong pong && pong.AppProtocolVersion != _appProtocolVersion)
-                {
-                    dealer.Dispose();
-
-                    DifferentProtocolVersionEventArgs args =
-                        new DifferentProtocolVersionEventArgs
-                        {
-                            ExpectedVersion = _appProtocolVersion,
-                            ActualVersion = pong.AppProtocolVersion,
-                        };
-
-                    DifferentVersionPeerEncountered?.Invoke(this, args);
-
-                    throw new DifferentAppProtocolVersionException(
-                        $"Peer protocol version is different.",
-                        _appProtocolVersion,
-                        pong.AppProtocolVersion);
-                }
-
-                _dealers[peer.Address] = dealer;
-
-                return Message.Parse(reply, true);
+                dealer.ReceiveReady += ReceiveReply;
+                _replyPoller.Add(dealer);
             }
             catch (IOException)
             {
@@ -587,10 +545,9 @@ namespace Libplanet.Net
             catch (Exception e)
             {
                 _logger.Debug($"Unexpected exception. [{e}]");
+                dealer.Dispose();
                 throw;
             }
-
-            return null;
         }
 
         internal void ReplyMessage(Message message)
@@ -858,70 +815,6 @@ namespace Libplanet.Net
         {
             var message = new TxIds(Address, txIds);
             BroadcastMessage(message);
-        }
-
-        private async Task ProcessMessageAsync(
-            Message message,
-            CancellationToken cancellationToken)
-        {
-            switch (message)
-            {
-                case Ping ping:
-                    {
-                        _logger.Debug($"Ping received.");
-                        await _protocol.RecvMessageAsync(ping);
-                        break;
-                    }
-
-                case GetBlockHashes getBlockHashes:
-                    {
-                        IEnumerable<HashDigest<SHA256>> hashes =
-                            _blockChain.FindNextHashes(
-                                getBlockHashes.Locator,
-                                getBlockHashes.Stop);
-                        var reply = new BlockHashes(Address, hashes)
-                        {
-                            Identity = getBlockHashes.Identity,
-                        };
-                        ReplyMessage(reply);
-                        break;
-                    }
-
-                case GetBlocks getBlocks:
-                    {
-                        TransferBlocks(getBlocks);
-                        break;
-                    }
-
-                case GetTxs getTxs:
-                    {
-                        TransferTxs(getTxs);
-                        break;
-                    }
-
-                case TxIds txIds:
-                    {
-                        await ProcessTxIds(txIds, cancellationToken);
-                        break;
-                    }
-
-                case BlockHashes blockHashes:
-                    {
-                        await ProcessBlockHashes(blockHashes, cancellationToken);
-                        break;
-                    }
-
-                case FindPeer findPeer:
-                    {
-                        _logger.Debug($"FindPeer received. [{findPeer}]");
-                        await _protocol.RecvMessageAsync(findPeer);
-                        break;
-                    }
-
-                default:
-                    Trace.Fail($"Can't handle message. [{message}]");
-                    break;
-            }
         }
 
         private async Task ProcessBlockHashes(
@@ -1313,7 +1206,7 @@ namespace Libplanet.Net
                 _logger.Debug($"The message[{message}] has parsed.");
 
                 // it's still async because some method it relies are async yet.
-                _ = ProcessMessageAsync(message, _cancellationToken);
+                MessageReceived.Invoke(this, message);
             }
             catch (InvalidMessageException ex)
             {
@@ -1322,6 +1215,57 @@ namespace Libplanet.Net
             catch (Exception ex)
             {
                 _logger.Error(ex, "An unexpected exception occured during ReceiveMessage().");
+                throw;
+            }
+        }
+
+        private void ReceiveReply(object sender, NetMQSocketEventArgs e)
+        {
+            try
+            {
+                NetMQMessage raw = e.Socket.ReceiveMultipartMessage();
+                _logger.Verbose($"The raw message[{raw}] has received.");
+                Message message = Message.Parse(raw, true);
+                _logger.Debug($"The message[{message}] has parsed.");
+
+                if (message is Pong pong && pong.AppProtocolVersion != _appProtocolVersion)
+                {
+                    e.Socket.Dispose();
+
+                    DifferentProtocolVersionEventArgs args =
+                        new DifferentProtocolVersionEventArgs
+                        {
+                            ExpectedVersion = _appProtocolVersion,
+                            ActualVersion = pong.AppProtocolVersion,
+                        };
+
+                    DifferentVersionPeerEncountered?.Invoke(this, args);
+
+                    throw new DifferentAppProtocolVersionException(
+                        $"Peer protocol version is different.",
+                        _appProtocolVersion,
+                        pong.AppProtocolVersion);
+                }
+
+                MessageReceived.Invoke(this, message);
+
+                _replyPoller.Remove(e.Socket);
+                e.Socket.ReceiveReady -= ReceiveReply;
+                e.Socket.Dispose();
+            }
+            catch (InvalidMessageException ex)
+            {
+                _logger.Error(ex, "Could not parse NetMQMessage properly; ignore.");
+                _replyPoller.Remove(e.Socket);
+                e.Socket.ReceiveReady -= ReceiveReply;
+                e.Socket.Dispose();
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "An unexpected exception occured during ReceiveMessage().");
+                _replyPoller.Remove(e.Socket);
+                e.Socket.ReceiveReady -= ReceiveReply;
+                e.Socket.Dispose();
                 throw;
             }
         }

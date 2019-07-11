@@ -208,30 +208,25 @@ namespace Libplanet.Net.Protocols
             return peers;
         }
 
-        public async Task RecvMessageAsync(Message message)
+        public void ReceiveMessage(object sender, Message message)
         {
             switch (message)
             {
                 case Ping ping:
-                    await RecvPingAsync(ping.Remote, ping.Echo, ping.Identity);
+                    _ = ReceivePingAsync(ping.Remote, ping.Echo, ping.Identity);
                     break;
 
                 case Pong pong:
-                    await RecvPongAsync(pong.Remote, pong.Echoed);
+                    _ = ReceivePongAsync(pong.Remote, pong.Echoed);
                     break;
 
                 case FindPeer findPeer:
-                    await RecvFindPeerAsync(findPeer.Remote, findPeer.Target, findPeer.Identity);
+                    _ = ReceiveFindPeerAsync(findPeer.Remote, findPeer.Target, findPeer.Identity);
                     break;
 
                 case Neighbours neighbours:
-                    await RecvNeighboursAsync(neighbours.Remote, neighbours.Found);
+                    _ = ReceiveNeighboursAsync(neighbours.Remote, neighbours.Found);
                     break;
-
-                default:
-                    throw new InvalidMessageException(
-                        $"The reply of message is unexpected type. " +
-                        $"but {message}");
             }
         }
 
@@ -319,7 +314,7 @@ namespace Libplanet.Net.Protocols
         }
 
         // send pong back to remote
-        private async Task RecvPingAsync(Peer remote, byte[] echo, byte[] identity)
+        private async Task ReceivePingAsync(Peer remote, byte[] echo, byte[] identity)
         {
             if (remote == _thisPeer)
             {
@@ -332,7 +327,7 @@ namespace Libplanet.Net.Protocols
         }
 
         // receive pong
-        private async Task RecvPongAsync(Peer remote, byte[] echoed)
+        private async Task ReceivePongAsync(Peer remote, byte[] echoed)
         {
             if (remote == _thisPeer)
             {
@@ -347,7 +342,7 @@ namespace Libplanet.Net.Protocols
             await UpdateAsync(remote, pingid);
         }
 
-        private async Task RecvNeighboursAsync(Peer remote, List<Peer> found)
+        private async Task ReceiveNeighboursAsync(Peer remote, List<Peer> found)
         {
             List<Peer> peers = new List<Peer>();
             List<Task> tasks = new List<Task>();
@@ -403,7 +398,7 @@ namespace Libplanet.Net.Protocols
 
         // FIXME: this method is not safe from amplification attack
         // maybe ping/pong/ping/pong is required
-        private async Task RecvFindPeerAsync(Peer remote, Address target, byte[] identity)
+        private async Task ReceiveFindPeerAsync(Peer remote, Address target, byte[] identity)
         {
             await UpdateAsync(remote);
             List<Peer> found = _routing.Neighbours(target, BucketSize).ToList();
