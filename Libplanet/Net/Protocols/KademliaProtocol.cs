@@ -75,17 +75,12 @@ namespace Libplanet.Net.Protocols
 
                 // FIXME: bootstrap peer is always valid? should check validity?
                 await _routing.AddPeerAsync(bootstrapPeer);
-                _ = DoFindPeerAsync(_thisPeer.Address, bootstrapPeer);
+                await DoFindPeerAsync(_thisPeer.Address, bootstrapPeer);
             }
 
             // should think of the way if bootstraping is done,
             // in order to get closest peer for preloading in swarm
             await Task.Delay((int)RequestTimeout);
-        }
-
-        public async Task UpdateAsync()
-        {
-            await UpdateAsync(null);
         }
 
         // this updates routing table when receiving a message.
@@ -140,7 +135,7 @@ namespace Libplanet.Net.Protocols
                     await _routing.RemovePeerAsync(ep.Target);
                     if (ep.Replacement != null)
                     {
-                        await UpdateAsync(ep.Replacement);
+                        _ = UpdateAsync(ep.Replacement);
                     }
 
                     if (peer != null && ep.Target.Address.Equals(peer.Address))
@@ -169,7 +164,7 @@ namespace Libplanet.Net.Protocols
                 }
                 else
                 {
-                    _ = PingAsync(evictionCandidate, peer);
+                    await PingAsync(evictionCandidate, peer);
                     Log.Debug($"Evict peer [{evictionCandidate}]?");
                 }
             }
@@ -178,7 +173,7 @@ namespace Libplanet.Net.Protocols
             {
                 foreach (Peer replacement in bucket.ReplacementCache)
                 {
-                    _ = PingAsync(replacement);
+                    await PingAsync(replacement);
                 }
             }
 
@@ -208,24 +203,32 @@ namespace Libplanet.Net.Protocols
             return peers;
         }
 
+        public void Timeout(object sender, Peer peer)
+        {
+            _ = UpdateAsync(null);
+        }
+
         public void ReceiveMessage(object sender, Message message)
         {
             switch (message)
             {
                 case Ping ping:
-                    _ = ReceivePingAsync(ping.Remote, ping.Echo, ping.Identity);
+                    ReceivePingAsync(ping.Remote, ping.Echo, ping.Identity).Wait();
                     break;
 
                 case Pong pong:
-                    _ = ReceivePongAsync(pong.Remote, pong.Echoed);
+                    ReceivePongAsync(pong.Remote, pong.Echoed).Wait();
                     break;
 
                 case FindPeer findPeer:
-                    _ = ReceiveFindPeerAsync(findPeer.Remote, findPeer.Target, findPeer.Identity);
+                    ReceiveFindPeerAsync(
+                        findPeer.Remote,
+                        findPeer.Target,
+                        findPeer.Identity).Wait();
                     break;
 
                 case Neighbours neighbours:
-                    _ = ReceiveNeighboursAsync(neighbours.Remote, neighbours.Found);
+                    ReceiveNeighboursAsync(neighbours.Remote, neighbours.Found).Wait();
                     break;
             }
         }
@@ -243,14 +246,12 @@ namespace Libplanet.Net.Protocols
                 throw new ArgumentNullException(nameof(target));
             }
 
-            byte[] echoed = new SHA256CryptoServiceProvider()
-                .ComputeHash(Encoding.ASCII.GetBytes(_thisPeer.ToString() + DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()));
+            byte[] echoed = await SendPingAsync(target);
             Log.Debug($"Ping's echo: {ByteUtil.Hex(echoed)}, to [{target.Address.ToHex()}]");
             string pingid = MakePingId(echoed, target);
             DateTimeOffset timeout =
                 DateTimeOffset.UtcNow + TimeSpan.FromMilliseconds(RequestTimeout);
             _expectedPongs[pingid] = new ExpectedPong(timeout, target, replacement);
-            await SendPingAsync(target, echoed);
         }
 #pragma warning restore
 
@@ -280,10 +281,15 @@ namespace Libplanet.Net.Protocols
             await Task.WhenAll(tasks);
         }
 
-        private async Task SendPingAsync(Peer addressee, byte[] echo)
+        private async Task<byte[]> SendPingAsync(Peer addressee)
         {
+            byte[] echo = new SHA256CryptoServiceProvider()
+                .ComputeHash(Encoding.ASCII.GetBytes(
+                    _thisPeer.ToString() +
+                    DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()));
             Ping ping = new Ping(echo);
-            await _swarm.SendMessageWithReplyAsync(addressee, ping);
+            await _swarm.SendMessageAsync(addressee, ping, true);
+            return echo;
         }
 
         private void SendPong(
@@ -310,7 +316,7 @@ namespace Libplanet.Net.Protocols
         private async Task SendFindPeerAsync(Peer addressee, Address target)
         {
             FindPeer findPeer = new FindPeer(target);
-            await _swarm.SendMessageWithReplyAsync(addressee, findPeer);
+            await _swarm.SendMessageAsync(addressee, findPeer, true);
         }
 
         // send pong back to remote
@@ -380,7 +386,7 @@ namespace Libplanet.Net.Protocols
                         // This prevents sending find request again to same peer
                         // FIXME: this is required? not contained in original implementation
                         entry.Value.Sent.Add(peers[i]);
-                        _ = SendFindPeerAsync(peers[i], entry.Key);
+                        tasks.Add(SendFindPeerAsync(peers[i], entry.Key));
                     }
                 }
             }
