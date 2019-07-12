@@ -796,9 +796,9 @@ namespace Libplanet.Net
             TimeSpan lifetime = TurnPermissionLifetime;
             while (!cancellationToken.IsCancellationRequested)
             {
-                await Task.Delay(lifetime - TimeSpan.FromMinutes(1));
+                await Task.Delay(lifetime - TimeSpan.FromMinutes(1), cancellationToken);
                 await Task.WhenAll(
-                    _peers.Keys.Select(CreatePermission));
+                    Peers.Select(CreatePermission));
             }
         }
 
