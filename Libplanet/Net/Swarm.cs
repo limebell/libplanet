@@ -450,7 +450,6 @@ namespace Libplanet.Net
         {
             _logger.Debug("Trying to broadcast blocks...");
             var message = new BlockHashes(
-                Address,
                 blocks.Select(b => b.Hash)
             );
             BroadcastMessage(message);
@@ -835,7 +834,7 @@ namespace Libplanet.Net
 
         private void BroadcastTxIds(IEnumerable<TxId> txIds)
         {
-            var message = new TxIds(Address, txIds);
+            var message = new TxIds(txIds);
             BroadcastMessage(message);
         }
 
@@ -850,7 +849,7 @@ namespace Libplanet.Net
                             _blockChain.FindNextHashes(
                                 getBlockHashes.Locator,
                                 getBlockHashes.Stop);
-                        var reply = new BlockHashes(Address, hashes)
+                        var reply = new BlockHashes(hashes)
                         {
                             Identity = getBlockHashes.Identity,
                         };
@@ -886,12 +885,6 @@ namespace Libplanet.Net
 
         private async Task ProcessBlockHashes(BlockHashes message)
         {
-            if (!(message.Sender is Address from))
-            {
-                throw new NullReferenceException(
-                    "BlockHashes doesn't have sender address.");
-            }
-
             Peer peer = message.Remote;
 
             _logger.Debug(
@@ -1155,12 +1148,6 @@ namespace Libplanet.Net
             {
                 _logger.Debug("No txs to require.");
                 return;
-            }
-
-            if (!(message.Sender is Address from))
-            {
-                throw new NullReferenceException(
-                    "TxIds doesn't have sender address.");
             }
 
             Peer peer = message.Remote;
