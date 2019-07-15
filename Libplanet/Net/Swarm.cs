@@ -456,13 +456,6 @@ namespace Libplanet.Net
             _logger.Debug("Block broadcasting complete.");
         }
 
-        public void BroadcastTxs(IEnumerable<Transaction<T>> txs)
-        {
-            _logger.Debug("Broadcast Txs.");
-            List<TxId> txIds = txs.Select(tx => tx.Id).ToList();
-            BroadcastTxIds(txIds);
-        }
-
         /// <summary>
         /// Preemptively downloads blocks from registered <see cref="Peer"/>s.
         /// </summary>
@@ -826,7 +819,6 @@ namespace Libplanet.Net
 
                             if (txIds.Any())
                             {
-                                BroadcastTxIds(txIds);
                             }
                         }, cancellationToken);
                 }
@@ -838,10 +830,7 @@ namespace Libplanet.Net
             }
         }
 
-        private void BroadcastTxIds(IEnumerable<TxId> txIds)
         {
-            var message = new TxIds(txIds);
-            BroadcastMessage(message);
         }
 
         private async Task ProcessMessageAsync(Message message)
