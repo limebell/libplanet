@@ -145,7 +145,7 @@ namespace Libplanet.Tests.Net
         [Fact(Timeout = Timeout)]
         public async Task Ping()
         {
-            int size = 16;
+            int size = 3;
 
             Assert.True(size <= Count);
 
@@ -159,7 +159,7 @@ namespace Libplanet.Tests.Net
                 await Task.WhenAll(_swarms.Skip(1).Take(size - 1)
                     .Select(s => Task.Run(() => kp.PingAsync(s.AsPeer).Wait())));
 
-                await Task.Delay(5000);
+                await Task.Delay(1000);
             }
             finally
             {
@@ -616,53 +616,6 @@ namespace Libplanet.Tests.Net
         }
 
         [Fact(Timeout = Timeout)]
-        public async Task BroadcastTx()
-        {
-            Swarm<DumbAction> swarmA = _swarms[0];
-            Swarm<DumbAction> swarmB = _swarms[1];
-            Swarm<DumbAction> swarmC = _swarms[2];
-
-            BlockChain<DumbAction> chainA = _blockchains[0];
-            BlockChain<DumbAction> chainB = _blockchains[1];
-            BlockChain<DumbAction> chainC = _blockchains[2];
-
-            Transaction<DumbAction> tx = Transaction<DumbAction>.Create(
-                0,
-                new PrivateKey(),
-                new DumbAction[] { }
-            );
-
-            chainA.StageTransactions(
-                new Dictionary<Transaction<DumbAction>, bool> { { tx, true } });
-            chainA.MineBlock(_fx[0].Address1);
-
-            try
-            {
-                await StartAsync(swarmA);
-                await StartAsync(swarmB);
-                await StartAsync(swarmC);
-
-                await swarmB.BootstrapAsync(new[] { swarmA.AsPeer });
-                await swarmC.BootstrapAsync(new[] { swarmA.AsPeer });
-
-                swarmA.BroadcastTxs(new[] { tx });
-
-                await swarmC.TxReceived.WaitAsync();
-                await swarmB.TxReceived.WaitAsync();
-
-                Assert.Equal(tx, chainB.Transactions[tx.Id]);
-                Assert.Equal(tx, chainC.Transactions[tx.Id]);
-            }
-            finally
-            {
-                await Task.WhenAll(
-                    swarmA.StopAsync(),
-                    swarmB.StopAsync(),
-                    swarmC.StopAsync());
-            }
-        }
-
-        [Fact(Timeout = Timeout)]
         public async Task TxStagedNotToBroadcast()
         {
             Swarm<DumbAction> swarmA = _swarms[0];
@@ -746,6 +699,50 @@ namespace Libplanet.Tests.Net
         }
 
         [Fact(Timeout = Timeout)]
+        public async Task BroadcastTxMultiAsync()
+        {
+            int size = 10;
+
+            Assert.True(size <= Count);
+
+            Transaction<DumbAction> tx = Transaction<DumbAction>.Create(
+                0,
+                new PrivateKey(),
+                new DumbAction[] { }
+            );
+
+            _blockchains[0].StageTransactions(
+                new Dictionary<Transaction<DumbAction>, bool> { { tx, true } });
+
+            try
+            {
+                await Task.WhenAll(_swarms.Take(size).Select(s => StartAsync(s)));
+                await Task.WhenAll(_swarms.Skip(1).Take(size - 1)
+                    .Select(s => Task.Run(() => s.BootstrapAsync(
+                        new List<Peer> { _swarms[0].AsPeer }).Wait())));
+
+                await Task.Delay(1000);
+
+                await Task.WhenAll(_swarms.Skip(1).Take(size - 1)
+                    .Select(s => s.TxReceived.WaitAsync()));
+
+                for (int i = 1; i < size; i++)
+                {
+                    Assert.Equal(tx, _blockchains[i].Transactions[tx.Id]);
+                }
+            }
+            finally
+            {
+                await Task.WhenAll(_swarms.Take(size).Select(s => s.StopAsync()));
+            }
+
+            for (int i = 0; i < size; i++)
+            {
+                Log.Debug($"{_swarms[i].Trace()}");
+            }
+        }
+
+        [Fact(Timeout = Timeout)]
         public async Task CanBroadcastBlock()
         {
             Swarm<DumbAction> swarmA = _swarms[0];
@@ -784,19 +781,22 @@ namespace Libplanet.Tests.Net
 
                 swarmB.BroadcastBlocks(new[] { chainB.Last() });
 
-                await swarmC.BlockReceived.WaitAsync();
-                await swarmA.BlockReceived.WaitAsync();
+                /*await swarmC.BlockReceived.WaitAsync();
+                await swarmA.BlockReceived.WaitAsync();*/
+                await Task.Delay(1000);
 
-                Assert.Equal(chainB.AsEnumerable(), chainC);
-
+                // chainC may or may not be changed, because swarmC may not
+                // be directly connected to swarmB.
                 // chainB doesn't applied to chainA since chainB is shorter
-                // than chainA
+                // than chainA.
+                // this cannot be tested if preload is done in bootstrap...
                 Assert.NotEqual(chainB.AsEnumerable(), chainA);
 
                 swarmA.BroadcastBlocks(new[] { chainA.Last() });
 
-                await swarmB.BlockReceived.WaitAsync();
-                await swarmC.BlockReceived.WaitAsync();
+                /*await swarmB.BlockReceived.WaitAsync();
+                await swarmC.BlockReceived.WaitAsync();*/
+                await Task.Delay(1000);
 
                 Assert.Equal(chainA.AsEnumerable(), chainB);
                 Assert.Equal(chainA.AsEnumerable(), chainC);
@@ -807,6 +807,84 @@ namespace Libplanet.Tests.Net
                     swarmA.StopAsync(),
                     swarmB.StopAsync(),
                     swarmC.StopAsync());
+            }
+
+            for (int i = 0; i < 3; i++)
+            {
+                Log.Debug($"{_swarms[i].Trace()}");
+            }
+        }
+
+        [Fact(Timeout = Timeout)]
+        public async Task CanBroadcastBlockMany()
+        {
+            int size = 10;
+
+            Assert.True(size <= Count);
+
+            Swarm<DumbAction> swarmA = _swarms[0];
+            Swarm<DumbAction> swarmB = _swarms[1];
+
+            BlockChain<DumbAction> chainA = _blockchains[0];
+            BlockChain<DumbAction> chainB = _blockchains[1];
+
+            // chainA, chainB and chainC shares genesis block.
+            Block<DumbAction> genesis = chainA.MineBlock(_fx[0].Address1);
+            for (int i = 1; i < size; i++)
+            {
+                _blockchains[i].Append(genesis);
+            }
+
+            foreach (int i in Enumerable.Range(0, 10))
+            {
+                chainA.MineBlock(_fx[0].Address1);
+                await Task.Delay(100);
+            }
+
+            foreach (int i in Enumerable.Range(0, 3))
+            {
+                chainB.MineBlock(_fx[1].Address1);
+                await Task.Delay(100);
+            }
+
+            try
+            {
+                await Task.WhenAll(_swarms.Take(size).Select(s => StartAsync(s)));
+
+                await Task.WhenAll(_swarms.Skip(1).Take(size - 1)
+                    .Select(s => Task.Run(() => s.BootstrapAsync(
+                        new List<Peer> { _swarms[0].AsPeer }).Wait())));
+
+                swarmB.BroadcastBlocks(new[] { chainB.Last() });
+
+                await Task.Delay(5000);
+
+                // chainC may or may not be changed, because swarmC may not
+                // be directly connected to swarmB.
+                // chainB doesn't applied to chainA since chainB is shorter
+                // than chainA.
+                Assert.NotEqual(chainB.AsEnumerable(), chainA);
+
+                swarmA.BroadcastBlocks(new[] { chainA.Last() });
+
+                await Task.Delay(5000);
+
+                for (int i = 1; i < size; i++)
+                {
+                    Assert.Equal(chainA.AsEnumerable(), _blockchains[i]);
+                }
+            }
+            finally
+            {
+                for (int i = 0; i < size; i++)
+                {
+                    await _swarms[i].StopAsync();
+                }
+            }
+
+            for (int i = 0; i < size; i++)
+            {
+                Log.Debug($"{_swarms[i].Trace()}");
             }
         }
 
@@ -952,8 +1030,9 @@ namespace Libplanet.Tests.Net
                 await StartAsync(receiverSwarm);
 
                 await receiverSwarm.BootstrapAsync(new[] { minerSwarm.AsPeer });
+                await receiverSwarm.PreloadAsync();
 
-                await Task.Delay(TimeSpan.FromSeconds(10));
+                await Task.Delay(TimeSpan.FromSeconds(3));
 
                 Assert.Equal(minerChain.AsEnumerable(), receiverChain.AsEnumerable());
             }
@@ -991,9 +1070,10 @@ namespace Libplanet.Tests.Net
             try
             {
                 await StartAsync(minerSwarm);
-                await receiverSwarm.BootstrapAsync(new[] { minerSwarm.AsPeer });
+                await StartAsync(receiverSwarm);
 
-                await receiverSwarm.PreloadAsync(progress);
+                await receiverSwarm.BootstrapAsync(new[] { minerSwarm.AsPeer });
+                await receiverSwarm.PreloadAsync(minerSwarm.AsPeer, progress);
 
                 Assert.Equal(minerChain.AsEnumerable(), receiverChain.AsEnumerable());
 
