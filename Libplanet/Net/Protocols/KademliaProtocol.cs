@@ -190,11 +190,16 @@ namespace Libplanet.Net.Protocols
 
             if (peer != null)
             {
+                bool contains = _routing.Contains(peer);
                 Peer evictionCandidate = await _routing.AddPeerAsync(peer);
                 if (evictionCandidate is null)
                 {
                     // added successfully since there was empty space in the bucket
-                    Log.Debug($"Added [{peer.Address.ToHex()}] to [{_thisPeer.Address.ToHex()}]");
+                    if (!contains)
+                    {
+                        Log.Debug($"Added [{peer.Address.ToHex()}] to " +
+                            $"[{_thisPeer.Address.ToHex()}]");
+                    }
                 }
                 else
                 {
