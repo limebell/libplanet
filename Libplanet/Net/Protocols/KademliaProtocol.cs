@@ -73,9 +73,7 @@ namespace Libplanet.Net.Protocols
                     continue;
                 }
 
-                // FIXME: bootstrap peer is always valid? should check validity?
-                await _routing.AddPeerAsync(bootstrapPeer);
-                _ = DoFindPeerAsync(_thisPeer.Address, bootstrapPeer);
+                await PingAsync(bootstrapPeer, bootstrap: true);
             }
 
             // should think of the way if bootstraping is done,
