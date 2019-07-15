@@ -590,8 +590,8 @@ namespace Libplanet.Net
                         blockHashes as HashDigest<SHA256>[] ??
                         blockHashes.ToArray();
                     var request = new GetBlocks(blockHashesAsArray);
-                    await socket.SendMultipartMessageAsync(
-                        request.ToNetMQMessage(_privateKey, EndPoint, 0),
+                    await dealer.SendMultipartMessageAsync(
+                        request.ToNetMQMessage(_privateKey, EndPoint),
                         cancellationToken: yieldToken);
 
                     int hashCount = blockHashesAsArray.Count();
