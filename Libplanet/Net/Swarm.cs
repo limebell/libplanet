@@ -832,34 +832,28 @@ namespace Libplanet.Net
         }
 
         private async Task BroadcastBlockAsync(
-            TimeSpan broadcastTxInterval,
             CancellationToken cancellationToken)
         {
-            while (!cancellationToken.IsCancellationRequested)
+            try
             {
-                try
-                {
-                    await Task.Delay(broadcastTxInterval, cancellationToken);
+                await Task.Run(
+                    () =>
+                    {
+                        List<TxId> txIds = _blockChain
+                            .GetStagedTransactionIds(true)
+                            .ToList();
 
-                    await Task.Run(
-                        () =>
+                        if (txIds.Any())
                         {
-                            List<TxId> txIds = _blockChain
-                                .GetStagedTransactionIds(true)
-                                .ToList();
-
-                            if (txIds.Any())
-                            {
-                                var message = new TxIds(txIds);
-                                BroadcastMessage(message);
-                            }
-                        }, cancellationToken);
-                }
-                catch (Exception e)
-                {
-                    _logger.Error(e, "An unexpected exception occured during BroadcastTxAsync()");
-                    throw;
-                }
+                            var message = new TxIds(txIds);
+                            BroadcastMessage(message);
+                        }
+                    }, cancellationToken);
+            }
+            catch (Exception e)
+            {
+                _logger.Error(e, "An unexpected exception occured during BroadcastBlockAsync()");
+                throw;
             }
         }
 
@@ -938,9 +932,6 @@ namespace Libplanet.Net
                 _logger.Error(e, $"Append Failed. exception: {e}");
                 throw;
             }
-
-            BroadcastMessage(message);
-            _logger.Debug("Block hashes broadcasted successfully.");
         }
 
         private async Task<BlockChain<T>> SyncPreviousBlocksAsync(
@@ -1075,6 +1066,9 @@ namespace Libplanet.Net
                     _blockChain.Swap(previousBlocks);
                     _logger.Debug("Swapping complete");
                 }
+
+                Message msg = new BlockHashes(blocks.Select(b => b.Hash));
+                BroadcastMessage(msg);
             }
             else
             {
