@@ -72,8 +72,6 @@ namespace Libplanet.Net.Messages
 
         public Peer Remote { get; set; }
 
-        public int Level { get; set; }
-
         protected abstract MessageType Type { get; }
 
         protected abstract IEnumerable<NetMQFrame> DataFrames { get; }
@@ -85,15 +83,14 @@ namespace Libplanet.Net.Messages
                 throw new ArgumentException("Can't parse empty NetMQMessage.");
             }
 
-            // (reply == true)  [type, pubkey, host, port, level, sign, frames...]
-            // (reply == false) [identity, type, pubkey, host, port, level, sign, frames...]
-            int headerCount = reply ? 6 : 7;
-            MessageType rawType = (MessageType)raw[headerCount - 6].ConvertToInt32();
-            PublicKey publicKey = new PublicKey(raw[headerCount - 5].ToByteArray());
+            // (reply == true)  [type, pubkey, host, port, sign, frames...]
+            // (reply == false) [identity, type, pubkey, host, port, sign, frames...]
+            int headerCount = reply ? 5 : 6;
+            MessageType rawType = (MessageType)raw[headerCount - 5].ConvertToInt32();
+            PublicKey publicKey = new PublicKey(raw[headerCount - 4].ToByteArray());
             DnsEndPoint endPoint = new DnsEndPoint(
-                raw[headerCount - 4].ConvertToString(),
-                raw[headerCount - 3].ConvertToInt32());
-            int level = raw[headerCount - 2].ConvertToInt32();
+                raw[headerCount - 3].ConvertToString(),
+                raw[headerCount - 2].ConvertToInt32());
             byte[] signature = raw[headerCount - 1].ToByteArray();
 
             NetMQFrame[] body = raw.Skip(headerCount).ToArray();
@@ -130,7 +127,6 @@ namespace Libplanet.Net.Messages
                 type, new[] { body });
 
             message.Remote = new Peer(publicKey, endPoint);
-            message.Level = level;
             if (!reply)
             {
                 message.Identity = raw[0].Buffer.ToArray();
@@ -157,7 +153,6 @@ namespace Libplanet.Net.Messages
 
             // Write headers. (inverse order)
             message.Push(key.Sign(message.ToByteArray()));
-            message.Push(Level);
             message.Push(endPoint.Port);
             message.Push(endPoint.Host);
             message.Push(key.PublicKey.Format(true));
