@@ -657,38 +657,37 @@ namespace Libplanet.Net
         {
             return new AsyncEnumerable<Transaction<T>>(async yield =>
             {
-                using (var socket = new DealerSocket(ToNetMQAddress(peer)))
-                {
-                    var txIdsAsArray = txIds as TxId[] ?? txIds.ToArray();
-                    var request = new GetTxs(txIdsAsArray);
-                    await socket.SendMultipartMessageAsync(
-                        request.ToNetMQMessage(_privateKey, EndPoint),
-                        cancellationToken: cancellationToken);
+                DealerSocket dealer = await GetDealerSocket(peer);
 
-                    int hashCount = txIdsAsArray.Count();
-                    _logger.Debug($"Required tx count: {hashCount}.");
-                    while (hashCount > 0)
+                dealer.Connect(ToNetMQAddress(peer));
+
+                var txIdsAsArray = txIds as TxId[] ?? txIds.ToArray();
+                var request = new GetTxs(txIdsAsArray);
+                dealer.SendMultipartMessage(request.ToNetMQMessage(_privateKey, EndPoint));
+
+                int hashCount = txIdsAsArray.Count();
+                _logger.Debug($"Required tx count: {hashCount}.");
+                while (hashCount > 0)
+                {
+                    _logger.Debug("Receiving tx...");
+                    NetMQMessage response = dealer.ReceiveMultipartMessage();
+                    Message parsedMessage = Message.Parse(response, true);
+                    if (parsedMessage is Messages.Tx parsed)
                     {
-                        _logger.Debug("Receiving tx...");
-                        NetMQMessage response =
-                        await socket.ReceiveMultipartMessageAsync(
-                            cancellationToken: cancellationToken);
-                        Message parsedMessage = Message.Parse(response, true);
-                        if (parsedMessage is Messages.Tx parsed)
-                        {
-                            Transaction<T> tx = Transaction<T>.FromBencodex(
-                                parsed.Payload);
-                            await yield.ReturnAsync(tx);
-                            hashCount--;
-                        }
-                        else
-                        {
-                            throw new InvalidMessageException(
-                                $"The response of getdata isn't block. " +
-                                $"but {parsedMessage}");
-                        }
+                        Transaction<T> tx = Transaction<T>.FromBencodex(
+                            parsed.Payload);
+                        await yield.ReturnAsync(tx);
+                        hashCount--;
+                    }
+                    else
+                    {
+                        throw new InvalidMessageException(
+                            $"The response of getdata isn't block. " +
+                            $"but {parsedMessage}");
                     }
                 }
+
+                dealer.Dispose();
             });
         }
 
@@ -819,6 +818,8 @@ namespace Libplanet.Net
 
                             if (txIds.Any())
                             {
+                                var message = new TxIds(txIds);
+                                BroadcastMessage(message);
                             }
                         }, cancellationToken);
                 }
@@ -830,7 +831,36 @@ namespace Libplanet.Net
             }
         }
 
+        private async Task BroadcastBlockAsync(
+            TimeSpan broadcastTxInterval,
+            CancellationToken cancellationToken)
         {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                try
+                {
+                    await Task.Delay(broadcastTxInterval, cancellationToken);
+
+                    await Task.Run(
+                        () =>
+                        {
+                            List<TxId> txIds = _blockChain
+                                .GetStagedTransactionIds(true)
+                                .ToList();
+
+                            if (txIds.Any())
+                            {
+                                var message = new TxIds(txIds);
+                                BroadcastMessage(message);
+                            }
+                        }, cancellationToken);
+                }
+                catch (Exception e)
+                {
+                    _logger.Error(e, "An unexpected exception occured during BroadcastTxAsync()");
+                    throw;
+                }
+            }
         }
 
         private async Task ProcessMessageAsync(Message message)
@@ -1327,7 +1357,11 @@ namespace Libplanet.Net
             try
             {
                 _logger.Debug($"Broadcasting message [{msg}]");
-                _protocol.BroadcastMessageAsync(msg).Wait();
+                Task.WhenAll(
+                    _protocol.PeersToBroadcast.Select(s =>
+                        Task.Run(() => SendMessageAsync(s, msg, false))
+                    )
+                ).Wait();
             }
             catch (TimeoutException ex)
             {
