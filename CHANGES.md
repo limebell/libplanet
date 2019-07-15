@@ -16,44 +16,52 @@ To be released.
 
 - `Swarm<T>.PreloadAsync()` now takes target peer to sync blockchain with as its
 
-  argument. If the target field is leaved empty, `Swarm<T>` automatically sync with
+  argument. If the target field is leaved empty, `Swarm<T>` automatically syncs with
 
-  closest peer that is connected. [[#TBD]]
+  closest connected peer. [[#353]]
 
 - `AddPeersAsync` removed. Use `Swarm<T>.BootstrapAsync()` to make connection
 
   with seed peer. Unlike `Swarm<T>.AddPeersAsync()`, `Swarm<T>.BootstrapAsync()`
 
-  should be called after `Swarm<T>.StartAsync()`. [[#TBD]]
+  should be called after `Swarm<T>.StartAsync()`. [[#353]]
 
-- `Swarm<T>.BroadcastTxs()` removed. Transactions are broadcasted automatically.
+- `Swarm<T>.BroadcastTxs()` removed. Transactions are now broadcasted
 
-  [[#TBD]]
+  automatically. [[#353]]
 
 ### Behavioral changes
 
-- `Swarm<T>` will not blocked waiting a reply. It receives reply using `NetMQPoller`. [[#TBD]]
+- `Swarm<T>` does not create a block waiting a reply. It receives reply using
 
-- Peer connection does not maintained. It will be disposed right after receiving reply,
+  `NetMQPoller`. [[#353]]
 
-  or timeout. [[#TBD]]
+- `PeerSetDelta` is not used anymore. All method using `PeerSetDelta` removed, or
+
+  replaced. [[#353]]
+
+- Peer connection does not maintained anymore. It is disposed right after reply received,
+
+  or timeout occurred. [[#353]]
 
 - `Swarm<T>` does not communicate with all the peers on the network directly. Choosing
 
-  and connecting to the peers is done via Kademlia protocol. [[#TBD]]
+  and connecting to the peers are done via Kademlia protocol. [[#353]]
 
-- `Message.Pong` does not carry blockchain's tip index. [[#TBD]]
+- `Swarm<T>.StartAsync()` does not run `Swarm<T>.PreloadAsync()` anymore. [[#353]]
 
-- `Message.BlockHashes` and `Message.TxIds` do not carry sender information. [[#TBD]]
+- `Message.Pong` does not carry blockchain's tip index. [[#353]]
+
+- `Message.BlockHashes` and `Message.TxIds` do not carry sender information. [[#353]]
 
 ### Bug fixes
 
-- Added `cancellationToken` option to `Task.Delay()` in `Swarm<T>.RefreshPermissions()`
+- `cancellationToken` option added to `Task.Delay()` in `Swarm<T>.RefreshPermissions()`
 
-  [[#TBD]]
+  [[#353]]
 
 [#350]: https://github.com/planetarium/libplanet/pull/350
-[#TBD]: https://github.com/planetarium/libplanet/pull/TBD
+[#353]: https://github.com/planetarium/libplanet/pull/353
 
 
 Version 0.4.1
