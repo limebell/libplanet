@@ -14,12 +14,46 @@ To be released.
 
 ### Added interfaces
 
+- `Swarm<T>.PreloadAsync()` now takes target peer to sync blockchain with as its
+
+  argument. If the target field is leaved empty, `Swarm<T>` automatically sync with
+
+  closest peer that is connected. [[#TBD]]
+
+- `AddPeersAsync` removed. Use `Swarm<T>.BootstrapAsync()` to make connection
+
+  with seed peer. Unlike `Swarm<T>.AddPeersAsync()`, `Swarm<T>.BootstrapAsync()`
+
+  should be called after `Swarm<T>.StartAsync()`. [[#TBD]]
+
+- `Swarm<T>.BroadcastTxs()` removed. Transactions are broadcasted automatically.
+
+  [[#TBD]]
+
 ### Behavioral changes
+
+- `Swarm<T>` will not blocked waiting a reply. It receives reply using `NetMQPoller`. [[#TBD]]
+
+- Peer connection does not maintained. It will be disposed right after receiving reply,
+
+  or timeout. [[#TBD]]
+
+- `Swarm<T>` does not communicate with all the peers on the network directly. Choosing
+
+  and connecting to the peers is done via Kademlia protocol. [[#TBD]]
+
+- `Message.Pong` does not carry blockchain's tip index. [[#TBD]]
+
+- `Message.BlockHashes` and `Message.TxIds` do not carry sender information. [[#TBD]]
 
 ### Bug fixes
 
+- Added `cancellationToken` option to `Task.Delay()` in `Swarm<T>.RefreshPermissions()`
+
+  [[#TBD]]
 
 [#350]: https://github.com/planetarium/libplanet/pull/350
+[#TBD]: https://github.com/planetarium/libplanet/pull/TBD
 
 
 Version 0.4.1
