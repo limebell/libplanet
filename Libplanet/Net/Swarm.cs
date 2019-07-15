@@ -638,7 +638,7 @@ namespace Libplanet.Net
                     var txIdsAsArray = txIds as TxId[] ?? txIds.ToArray();
                     var request = new GetTxs(txIdsAsArray);
                     await socket.SendMultipartMessageAsync(
-                        request.ToNetMQMessage(_privateKey, EndPoint, 0),
+                        request.ToNetMQMessage(_privateKey, EndPoint),
                         cancellationToken: cancellationToken);
 
                     int hashCount = txIdsAsArray.Count();
@@ -1232,7 +1232,6 @@ namespace Libplanet.Net
         private void DoBroadcast(object sender, NetMQQueueEventArgs<Message> e)
         {
             Message msg = e.Queue.Dequeue();
-            NetMQMessage netMQMessage = msg.ToNetMQMessage(_privateKey, EndPoint, 0);
 
             // FIXME Should replace with PUB/SUB model.
             try
@@ -1262,7 +1261,7 @@ namespace Libplanet.Net
         {
             Message msg = e.Queue.Dequeue();
             _logger.Debug($"Reply {msg} to {ByteUtil.Hex(msg.Identity)}...");
-            NetMQMessage netMQMessage = msg.ToNetMQMessage(_privateKey, EndPoint, -1);
+            NetMQMessage netMQMessage = msg.ToNetMQMessage(_privateKey, EndPoint);
             _router.SendMultipartMessage(netMQMessage);
             _logger.Debug($"Replied.");
         }
