@@ -447,18 +447,25 @@ namespace Libplanet.Net.Protocols
         [Serializable]
         private struct ExpectedPong
         {
-            public ExpectedPong(DateTimeOffset timeout, Peer target, Peer replacement)
+            public ExpectedPong(
+                DateTimeOffset timeout,
+                Peer target,
+                Peer replacement,
+                bool bootstrap)
             {
                 Timeout = timeout;
                 Target = target;
                 Replacement = replacement;
+                Bootstrap = bootstrap;
             }
 
-            public DateTimeOffset Timeout { get; }
+            public DateTimeOffset Timeout { get; set; }
 
             public Peer Target { get; }
 
             public Peer Replacement { get; }
+
+            public bool Bootstrap { get; }
         }
 
         // find request data type.
