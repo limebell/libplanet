@@ -40,11 +40,17 @@ namespace Libplanet.Net
         private static readonly TimeSpan TurnPermissionLifetime =
             TimeSpan.FromMinutes(5);
 
+        private static readonly TimeSpan ReplyTimeout =
+            TimeSpan.FromMilliseconds(1000);
+
+#pragma warning disable CS0414
+        private static readonly int MaxDealerCount = 10;
+#pragma warning restore CS16333
 
         private readonly BlockChain<T> _blockChain;
         private readonly PrivateKey _privateKey;
         private readonly RouterSocket _router;
-        private readonly IDictionary<Address, DealerSocket> _dealers;
+        private readonly IDictionary<Peer, DealerInfo> _dealers;
         private readonly int _appProtocolVersion;
 
         private readonly TimeSpan _dialTimeout;
@@ -136,7 +142,7 @@ namespace Libplanet.Net
             BlockReceived = new AsyncAutoResetEvent();
             DifferentVersionPeerEncountered = differentVersionPeerEncountered;
 
-            _dealers = new ConcurrentDictionary<Address, DealerSocket>();
+            _dealers = new ConcurrentDictionary<Peer, DealerInfo>();
             _router = new RouterSocket();
             _router.Options.RouterHandover = true;
             _replyQueue = new NetMQQueue<Message>();
@@ -193,6 +199,8 @@ namespace Libplanet.Net
             DifferentVersionPeerEncountered;
 
         private event EventHandler<Message> MessageReceived;
+
+        private event EventHandler<Peer> ReplyTimeouted;
 
         public DnsEndPoint EndPoint { get; private set; }
 
@@ -279,13 +287,19 @@ namespace Libplanet.Net
                         _replyPoller.Dispose();
                     }
 
+                    if (_protocol != null)
+                    {
+                        ReplyTimeouted -= _protocol.Timeout;
+                    }
+
                     _broadcastQueue.Dispose();
                     _replyQueue.Dispose();
                     _router.Dispose();
 
-                    foreach (DealerSocket s in _dealers.Values)
+                    foreach (DealerInfo info in _dealers.Values)
                     {
-                        s.Dispose();
+                        info.Socket.ReceiveReady -= ReceiveReply;
+                        info.Socket.Dispose();
                     }
 
                     _dealers.Clear();
@@ -386,12 +400,16 @@ namespace Libplanet.Net
                     await PreloadAsync(cancellationToken: _cancellationToken);
                 }
 
+                ReplyTimeouted += _protocol.Timeout;
+
                 var tasks = new List<Task>
                 {
                     // BroadcastTxAsync(broadcastTxInterval, _cancellationToken),
                     Task.Run(() => _poller.Run(), _cancellationToken),
                     Task.Run(() => _replyPoller.Run(), _cancellationToken),
                 };
+
+                tasks.Add(RefreshDealers(_cancellationToken));
 
                 if (behindNAT)
                 {
@@ -492,12 +510,7 @@ namespace Libplanet.Net
                 await CreatePermission(peer);
             }
 
-            if (!_dealers.TryGetValue(peer.Address, out DealerSocket dealer))
-            {
-                dealer = new DealerSocket();
-            }
-
-            return dealer;
+            return new DealerSocket();
         }
 
         internal async Task SendMessageWithReplyAsync(Peer peer, Message message)
@@ -512,6 +525,14 @@ namespace Libplanet.Net
             try
             {
                 string address = ToNetMQAddress(peer);
+
+                // wait until other connection expires
+                /*while (!_cancellationToken.IsCancellationRequested &&
+                    _dealers.Count >= MaxDealerCount)
+                {
+                    _logger.Debug($"Waiting for dealers to closed... [{peer.Address.ToHex()}]");
+                    await Task.Delay(10);
+                }*/
 
                 dealer.Connect(address);
 
@@ -546,35 +567,33 @@ namespace Libplanet.Net
             _replyQueue.Enqueue(message);
         }
 
-        internal async Task<IEnumerable<HashDigest<SHA256>>>
-            GetBlockHashesAsync(
+        // FIXME: Should deal with peer not found exception
+        internal async Task<IEnumerable<HashDigest<SHA256>>> GetBlockHashesAsync(
                 Peer peer,
                 BlockLocator locator,
                 HashDigest<SHA256>? stop,
                 CancellationToken token = default(CancellationToken)
             )
         {
+            DealerSocket dealer = await GetDealerSocket(peer);
+            dealer.Connect(ToNetMQAddress(peer));
             var request = new GetBlockHashes(locator, stop);
 
-            using (var socket = new DealerSocket(ToNetMQAddress(peer)))
+            _logger.Debug($"Send GetBlockHashesAsync to [{peer.Address.ToHex()}]");
+            dealer.SendMultipartMessage(request.ToNetMQMessage(_privateKey, EndPoint));
+
+            NetMQMessage response = dealer.ReceiveMultipartMessage();
+            _logger.Debug("Received BlockHashes");
+            Message parsedMessage = Message.Parse(response, reply: true);
+            dealer.Dispose();
+            if (parsedMessage is BlockHashes blockHashes)
             {
-                await socket.SendMultipartMessageAsync(
-                    request.ToNetMQMessage(_privateKey, EndPoint, 0),
-                    cancellationToken: token);
-
-                NetMQMessage response =
-                    await socket.ReceiveMultipartMessageAsync(
-                        cancellationToken: token);
-                Message parsedMessage = Message.Parse(response, reply: true);
-                if (parsedMessage is BlockHashes blockHashes)
-                {
-                    return blockHashes.Hashes;
-                }
-
-                throw new InvalidMessageException(
-                    $"The response of GetBlockHashes isn't BlockHashes. " +
-                    $"but {parsedMessage}");
+                return blockHashes.Hashes;
             }
+
+            throw new InvalidMessageException(
+                $"The response of GetBlockHashes isn't BlockHashes. " +
+                $"but {parsedMessage}");
         }
 
         internal IAsyncEnumerable<Block<T>> GetBlocksAsync(
@@ -583,9 +602,12 @@ namespace Libplanet.Net
         {
             return new AsyncEnumerable<Block<T>>(async yield =>
             {
+                DealerSocket dealer = await GetDealerSocket(peer);
                 CancellationToken yieldToken = yield.CancellationToken;
-                using (var socket = new DealerSocket(ToNetMQAddress(peer)))
+
+                try
                 {
+                    dealer.Connect(ToNetMQAddress(peer));
                     var blockHashesAsArray =
                         blockHashes as HashDigest<SHA256>[] ??
                         blockHashes.ToArray();
@@ -601,7 +623,7 @@ namespace Libplanet.Net
                     {
                         _logger.Debug("Receiving block...");
                         NetMQMessage response =
-                        await socket.ReceiveMultipartMessageAsync(
+                        await dealer.ReceiveMultipartMessageAsync(
                             cancellationToken: yieldToken);
                         Message parsedMessage = Message.Parse(response, true);
                         if (parsedMessage is Messages.Blocks blockMessage)
@@ -738,6 +760,27 @@ namespace Libplanet.Net
             {
                 await Task.Delay(lifetime - TimeSpan.FromMinutes(1));
                 lifetime = await _turnClient.RefreshAllocationAsync(lifetime);
+            }
+        }
+
+        private async Task RefreshDealers(CancellationToken cancellationToken)
+        {
+            TimeSpan period = TimeSpan.FromMilliseconds(100);
+            while (!cancellationToken.IsCancellationRequested && _dealers != null)
+            {
+                foreach (KeyValuePair<Peer, DealerInfo> entry in _dealers)
+                {
+                    if (entry.Value.Timeout < DateTimeOffset.UtcNow)
+                    {
+                        _replyPoller.Remove(entry.Value.Socket);
+                        entry.Value.Socket.ReceiveReady -= ReceiveReply;
+                        entry.Value.Socket.Dispose();
+                        ReplyTimeouted.Invoke(this, entry.Key);
+                        _dealers.Remove(entry.Key);
+                    }
+                }
+
+                await Task.Delay(period, cancellationToken);
             }
         }
 
@@ -1143,10 +1186,12 @@ namespace Libplanet.Net
         private void CloseDealer(Peer peer)
         {
             CheckStarted();
-            if (_dealers.TryGetValue(peer.Address, out DealerSocket dealer))
+            if (_dealers.ContainsKey(peer))
             {
-                dealer.Dispose();
-                _dealers.Remove(peer.Address);
+                _dealers[peer].Socket.ReceiveReady -= ReceiveReply;
+                _dealers[peer].Socket.Dispose();
+                ReplyTimeouted.Invoke(this, peer);
+                _dealers.Remove(peer);
             }
         }
 
@@ -1185,8 +1230,6 @@ namespace Libplanet.Net
 
                 if (message is Pong pong && pong.AppProtocolVersion != _appProtocolVersion)
                 {
-                    e.Socket.Dispose();
-
                     DifferentProtocolVersionEventArgs args =
                         new DifferentProtocolVersionEventArgs
                         {
@@ -1204,24 +1247,30 @@ namespace Libplanet.Net
 
                 MessageReceived.Invoke(this, message);
 
-                _replyPoller.Remove(e.Socket);
-                e.Socket.ReceiveReady -= ReceiveReply;
-                e.Socket.Dispose();
+                foreach (KeyValuePair<Peer, DealerInfo> entry in _dealers)
+                {
+                    if (entry.Value.Socket == e.Socket)
+                    {
+                        _logger.Debug($"Dealer removed of peer [{entry.Key.Address.ToHex()}]");
+                        _dealers.Remove(entry.Key);
+                        break;
+                    }
+                }
             }
             catch (InvalidMessageException ex)
             {
                 _logger.Error(ex, "Could not parse NetMQMessage properly; ignore.");
-                _replyPoller.Remove(e.Socket);
-                e.Socket.ReceiveReady -= ReceiveReply;
-                e.Socket.Dispose();
             }
             catch (Exception ex)
             {
                 _logger.Error(ex, "An unexpected exception occured during ReceiveMessage().");
+                throw;
+            }
+            finally
+            {
                 _replyPoller.Remove(e.Socket);
                 e.Socket.ReceiveReady -= ReceiveReply;
                 e.Socket.Dispose();
-                throw;
             }
         }
 
@@ -1313,6 +1362,19 @@ namespace Libplanet.Net
 
                 await _turnClient.CreatePermissionAsync(ep);
             }
+        }
+
+        private struct DealerInfo
+        {
+            public DealerInfo(DealerSocket socket, DateTimeOffset timeout)
+            {
+                Socket = socket;
+                Timeout = timeout;
+            }
+
+            public DealerSocket Socket { get; }
+
+            public DateTimeOffset Timeout { get; }
         }
     }
 }
