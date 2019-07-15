@@ -87,9 +87,23 @@ namespace Libplanet.Net.Protocols
             await Task.Delay((int)RequestTimeout);
         }
 
-        public async Task UpdateAsync()
+        public async Task BroadcastMessageAsync(Message message)
         {
-            await UpdateAsync(null);
+            int level = message.Level;
+            if (level == TableSize - 1)
+            {
+                return;
+            }
+
+            for (int i = level; i < TableSize; i++)
+            {
+                KBucket bucket = _routing.BucketOf(i);
+                if (!bucket.Empty())
+                {
+                    message.Level = i + 1;
+                    await _swarm.SendMessageAsync(bucket.GetRandomPeer(), message, false);
+                }
+            }
         }
 
         // this updates routing table when receiving a message.

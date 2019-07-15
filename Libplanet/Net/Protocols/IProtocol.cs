@@ -14,7 +14,7 @@ namespace Libplanet.Net.Protocols
 
         Task BootstrapAsync(List<Peer> bootstrapPeers);
 
-        Task UpdateAsync();
+        Task BroadcastMessageAsync(Message message);
 
         void ReceiveMessage(object sender, Message message);
     }
