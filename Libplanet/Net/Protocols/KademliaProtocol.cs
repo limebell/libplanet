@@ -8,6 +8,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Libplanet.Action;
 using Libplanet.Net.Messages;
+using Serilog;
 
 namespace Libplanet.Net.Protocols
 {
@@ -16,7 +17,7 @@ namespace Libplanet.Net.Protocols
     {
         private const int BucketSize = 16;
         private const int TableSize = Address.Size * sizeof(byte) * 8;
-        private const double RequestTimeout = 3 * 300 / 1000.0;
+        private const double RequestTimeout = 3 * 300;
         private const int IdleBucketRefreshInterval = 3600;
         private const int FindConcurrency = 3;
 
@@ -28,7 +29,6 @@ namespace Libplanet.Net.Protocols
         private readonly ConcurrentBag<string> _deletedPingids;
         private readonly ConcurrentDictionary<Address, DateTimeOffset> _findRequests;
 
-        // private bool _running = false;
         public KademliaProtocol(Swarm<T> swarm)
         {
             _swarm = swarm;
@@ -102,6 +102,7 @@ namespace Libplanet.Net.Protocols
                 if (_deletedPingids.Contains(pingid))
                 {
                     // pong received after timeout
+                    Log.Debug("after timeout");
                 }
                 else
                 {
@@ -110,11 +111,13 @@ namespace Libplanet.Net.Protocols
                         if (ep.Target.PublicKey.Equals(peer.PublicKey))
                         {
                             // public key mismatch
+                            Log.Debug("pk mismatch");
                             break;
                         }
                     }
                 }
 
+                Log.Debug("unexpected?");
                 return;
             }
 
@@ -123,22 +126,22 @@ namespace Libplanet.Net.Protocols
                 if (DateTimeOffset.UtcNow > entry.Value.Timeout)
                 {
                     // ping pong timeout
-                    _deletedPingids.Add(pingid);
-                    _expectedPongs.TryRemove(pingid, out ExpectedPong ep);
+                    _deletedPingids.Add(entry.Key);
+                    _expectedPongs.TryRemove(entry.Key, out ExpectedPong ep);
                     _routing.RemovePeer(ep.Target);
                     if (!(ep.Replacement is null))
                     {
                         Update(ep.Replacement);
                     }
 
-                    if (ep.Target == peer)
+                    if (ep.Target.Address.Equals(peer.Address))
                     {
                         return;
                     }
                 }
             }
 
-            if (_expectedPongs.ContainsKey(pingid))
+            if (!(pingid is null) && _expectedPongs.ContainsKey(pingid))
             {
                 _expectedPongs.TryRemove(pingid, out ExpectedPong ep);
                 if (!(ep.Replacement is null))
@@ -155,6 +158,7 @@ namespace Libplanet.Net.Protocols
             else
             {
                 Ping(evictionCandidate, peer);
+                Log.Debug("Eviction?");
             }
 
             foreach (KBucket bucket in _routing.NoneEmptyBuckets)
@@ -214,6 +218,7 @@ namespace Libplanet.Net.Protocols
                     "Cannot receive pong from self");
             }
 
+            Log.Debug($"Pong's echo: {ByteUtil.Hex(echoed)}, from [{remote.Address.ToHex()}]");
             string pingid = MakePingId(echoed, remote);
 
             // update process required
@@ -270,17 +275,22 @@ namespace Libplanet.Net.Protocols
 
         private string MakePingId(byte[] echoed, Peer peer)
         {
-            return echoed.ToString() + peer.PublicKey.ToString();
+            return ByteUtil.Hex(echoed) + peer.PublicKey.ToAddress().ToString();
         }
 
-        private void Ping(Peer target, Peer replacement = null)
+#pragma warning disable
+        internal void Ping(Peer target, Peer replacement = null)
         {
-            byte[] echoed = SendPing(target);
-            string pingid = MakePingId(echoed, _thisPeer);
+            byte[] echoed = new SHA256CryptoServiceProvider()
+                .ComputeHash(Encoding.ASCII.GetBytes(_thisPeer.ToString() + DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()));
+            Log.Debug($"Ping's echo: {ByteUtil.Hex(echoed)}, to [{target.Address.ToHex()}]");
+            string pingid = MakePingId(echoed, target);
             DateTimeOffset timeout =
                 DateTimeOffset.UtcNow + TimeSpan.FromMilliseconds(RequestTimeout);
             _expectedPongs[pingid] = new ExpectedPong(timeout, target, replacement);
+            SendPing(target, echoed);
         }
+#pragma warning restore
 
         private void DoFindPeer(Address target, Peer viaPeer = null)
         {
@@ -305,13 +315,10 @@ namespace Libplanet.Net.Protocols
             }
         }
 
-        private byte[] SendPing(Peer addressee)
+        private void SendPing(Peer addressee, byte[] echo)
         {
-            byte[] echo = new SHA256CryptoServiceProvider()
-                .ComputeHash(Encoding.ASCII.GetBytes(_thisPeer.ToString() + DateTimeOffset.UtcNow));
             Ping ping = new Ping(echo);
             _swarm.SendMessage(addressee, ping);
-            return echo;
         }
 
         private void SendPong(
