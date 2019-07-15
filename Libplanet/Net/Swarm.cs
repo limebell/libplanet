@@ -790,7 +790,7 @@ namespace Libplanet.Net
             TimeSpan lifetime = TurnPermissionLifetime;
             while (!cancellationToken.IsCancellationRequested)
             {
-                await Task.Delay(lifetime - TimeSpan.FromMinutes(1));
+                await Task.Delay(lifetime - TimeSpan.FromMinutes(1), cancellationToken);
                 await Task.WhenAll(
                     Peers.Select(CreatePermission));
             }
@@ -833,9 +833,7 @@ namespace Libplanet.Net
             BroadcastMessage(message);
         }
 
-        private async Task ProcessBlockHashes(
-            BlockHashes message,
-            CancellationToken cancellationToken = default(CancellationToken))
+        private async Task ProcessMessageAsync(Message message)
         {
             {
 
