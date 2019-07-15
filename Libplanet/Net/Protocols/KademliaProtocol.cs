@@ -65,6 +65,20 @@ namespace Libplanet.Net.Protocols
             }
         }
 
+        public ImmutableList<Peer> PeersToBroadcast
+        {
+            get
+            {
+                List<Peer> peers = new List<Peer>();
+                foreach (KBucket bucket in _routing.NonEmptyBuckets)
+                {
+                    peers.Add(bucket.GetRandomPeer());
+                }
+
+                return peers.ToImmutableList();
+            }
+        }
+
         public async Task BootstrapAsync(List<Peer> bootstrapPeers)
         {
             if (bootstrapPeers is null)
@@ -85,25 +99,6 @@ namespace Libplanet.Net.Protocols
             // should think of the way if bootstraping is done,
             // in order to get closest peer for preloading in swarm
             await Task.Delay((int)RequestTimeout);
-        }
-
-        public async Task BroadcastMessageAsync(Message message)
-        {
-            int level = message.Level;
-            if (level == TableSize - 1)
-            {
-                return;
-            }
-
-            for (int i = level; i < TableSize; i++)
-            {
-                KBucket bucket = _routing.BucketOf(i);
-                if (!bucket.Empty())
-                {
-                    message.Level = i + 1;
-                    await _swarm.SendMessageAsync(bucket.GetRandomPeer(), message, false);
-                }
-            }
         }
 
         // this updates routing table when receiving a message.
@@ -252,6 +247,10 @@ namespace Libplanet.Net.Protocols
 
                 case Neighbours neighbours:
                     ReceiveNeighboursAsync(neighbours.Remote, neighbours.Found).Wait();
+                    break;
+
+                default:
+                    _ = UpdateAsync(message.Remote);
                     break;
             }
         }

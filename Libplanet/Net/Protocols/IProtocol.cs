@@ -12,9 +12,9 @@ namespace Libplanet.Net.Protocols
 
         ImmutableList<Peer> Peers { get; }
 
-        Task BootstrapAsync(List<Peer> bootstrapPeers);
+        ImmutableList<Peer> PeersToBroadcast { get; }
 
-        Task BroadcastMessageAsync(Message message);
+        Task BootstrapAsync(List<Peer> bootstrapPeers);
 
         void ReceiveMessage(object sender, Message message);
 
