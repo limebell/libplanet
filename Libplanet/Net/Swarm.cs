@@ -1161,9 +1161,6 @@ namespace Libplanet.Net
             _blockChain.StageTransactions(toStage);
             TxReceived.Set();
             _logger.Debug("Txs staged successfully.");
-
-            BroadcastMessage(message);
-            _logger.Debug("Txs broadcasted successfully.");
         }
 
         private void TransferBlocks(GetBlocks getData)
@@ -1262,7 +1259,7 @@ namespace Libplanet.Net
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "An unexpected exception occured during ReceiveMessage().");
+                _logger.Error(ex, "An unexpected exception occured during ReceiveMessage.");
                 throw;
             }
         }
@@ -1274,7 +1271,7 @@ namespace Libplanet.Net
                 NetMQMessage raw = e.Socket.ReceiveMultipartMessage();
                 _logger.Verbose($"The raw message[{raw}] has received.");
                 Message message = Message.Parse(raw, true);
-                _logger.Debug($"The message[{message}] has parsed.");
+                _logger.Debug($"The reply [{message}] has parsed.");
 
                 if (message is Pong pong && pong.AppProtocolVersion != _appProtocolVersion)
                 {
@@ -1311,7 +1308,7 @@ namespace Libplanet.Net
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "An unexpected exception occured during ReceiveMessage().");
+                _logger.Error(ex, "An unexpected exception occured during ReceiveReply.");
                 throw;
             }
             finally
