@@ -751,7 +751,7 @@ namespace Libplanet.Net
             {
                 await Task.Delay(lifetime - TimeSpan.FromMinutes(1));
                 await Task.WhenAll(
-                    _peers.Keys.Select(CreatePermission));
+                    Peers.Select(CreatePermission));
             }
         }
 
