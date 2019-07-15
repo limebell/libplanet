@@ -491,6 +491,12 @@ namespace Libplanet.Net
             await Task.Delay(0);
         }
 
+        internal string Trace()
+        {
+            KademliaProtocol<T> kp = (KademliaProtocol<T>)_protocol;
+            return kp.Trace();
+        }
+
         internal void BroadcastMessage(Message message)
         {
             _broadcastQueue.Enqueue(message);
