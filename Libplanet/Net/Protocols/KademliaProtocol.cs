@@ -251,6 +251,27 @@ namespace Libplanet.Net.Protocols
             }
         }
 
+        public string Trace()
+        {
+            string trace = "================================================\n";
+            trace += $"Routing table of [{_thisPeer.Address.ToHex()}]";
+            for (int i = 0; i < TableSize; i++)
+            {
+                if (!_routing.BucketOf(i).Empty())
+                {
+                    trace += $"\nBucket {i} : ";
+                    foreach (Peer peer in _routing.BucketOf(i).Peers)
+                    {
+                        trace += $"[{peer.Address.ToString()}], ";
+                    }
+
+                    trace = trace.TrimEnd(' ', ',');
+                }
+            }
+
+            return trace.Trim('\n');
+        }
+
         private string MakePingId(byte[] echoed, Peer peer)
         {
             return ByteUtil.Hex(echoed) + peer.PublicKey.ToAddress().ToString();
