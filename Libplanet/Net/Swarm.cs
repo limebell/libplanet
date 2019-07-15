@@ -388,7 +388,9 @@ namespace Libplanet.Net
                 using (await _runningMutex.LockAsync())
                 {
                     Running = true;
-                    await PreloadAsync(cancellationToken: _cancellationToken);
+
+                    // FIXME: where this should be at?
+                    // await PreloadAsync(cancellationToken: _cancellationToken);
                 }
 
                 _protocol = new KademliaProtocol<T>(this, _appProtocolVersion, _cancellationToken);
@@ -459,6 +461,9 @@ namespace Libplanet.Net
         /// <summary>
         /// Preemptively downloads blocks from registered <see cref="Peer"/>s.
         /// </summary>
+        /// <param name="peer">
+        /// A target peer to load blocks from.
+        /// </param>
         /// <param name="progress">
         /// An instance that receives progress updates for block downloads.
         /// </param>
@@ -471,17 +476,30 @@ namespace Libplanet.Net
         /// You only can <c>await</c> until the method is completed.
         /// </returns>
         public async Task PreloadAsync(
+            Peer peer = null,
             IProgress<BlockDownloadState> progress = null,
             CancellationToken cancellationToken = default(CancellationToken))
         {
-            /*IAsyncEnumerable<(Peer, long?)> peersWithLength =
-                null.Select(
-                    pp => (pp.Item1, pp.Item2.TipIndex));
+            if (peer is null)
+            {
+                ImmutableList<Peer> peers = _protocol.PeersToBroadcast;
+                if (peers.Count == 0)
+                {
+                    return;
+                }
+
+                peer = peers[peers.Count - 1];
+            }
+
+            if (cancellationToken == default(CancellationToken))
+            {
+                cancellationToken = _cancellationToken;
+            }
+
             await SyncBehindsBlocksFromPeersAsync(
-                peersWithLength,
+                peer,
                 progress,
-                cancellationToken);*/
-            await Task.Delay(0);
+                cancellationToken);
         }
 
         internal string Trace()
@@ -729,23 +747,14 @@ namespace Libplanet.Net
 
         // change this into just take one peer, no length needed
         private async Task SyncBehindsBlocksFromPeersAsync(
-            IAsyncEnumerable<(Peer, long?)> peersWithLength,
+            Peer peer,
             IProgress<BlockDownloadState> progress,
             CancellationToken cancellationToken)
         {
-            // Implement it directly with AggreateAsync()
-            // because there is no IAsyncEnumerable<T>.MaxAsync().
-            (Peer, long?)? longestPeerWithLength =
-                await peersWithLength.AggregateAsync(
-                    default((Peer, long?)?),
-                    (p, c) => (p?.Item2 > c.Item2) ? p : c,
-                    cancellationToken);
-
-            if (longestPeerWithLength != null &&
-                !(_blockChain.Tip?.Index >= longestPeerWithLength?.Item2))
+            if (peer != null)
             {
                 BlockChain<T> synced = await SyncPreviousBlocksAsync(
-                    longestPeerWithLength?.Item1,
+                    peer,
                     null,
                     progress,
                     cancellationToken);
@@ -822,6 +831,10 @@ namespace Libplanet.Net
                                 BroadcastMessage(message);
                             }
                         }, cancellationToken);
+                }
+                catch (TaskCanceledException)
+                {
+                    _logger.Debug("Task Canceled");
                 }
                 catch (Exception e)
                 {
