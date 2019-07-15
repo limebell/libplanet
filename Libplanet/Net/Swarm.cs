@@ -441,7 +441,6 @@ namespace Libplanet.Net
         {
             _logger.Debug("Trying to broadcast blocks...");
             var message = new BlockHashes(
-                Address,
                 blocks.Select(b => b.Hash)
             );
             BroadcastMessage(message);
@@ -789,7 +788,7 @@ namespace Libplanet.Net
 
         private void BroadcastTxIds(IEnumerable<TxId> txIds)
         {
-            var message = new TxIds(Address, txIds);
+            var message = new TxIds(txIds);
             BroadcastMessage(message);
         }
 
@@ -797,11 +796,7 @@ namespace Libplanet.Net
             BlockHashes message,
             CancellationToken cancellationToken = default(CancellationToken))
         {
-            if (!(message.Sender is Address from))
             {
-                throw new NullReferenceException(
-                    "BlockHashes doesn't have sender address.");
-            }
 
             }
 
@@ -1067,13 +1062,7 @@ namespace Libplanet.Net
                 return;
             }
 
-            if (!(message.Sender is Address from))
-            {
-                throw new NullReferenceException(
-                    "TxIds doesn't have sender address.");
-            }
-
-            Peer peer = _peers.Keys.FirstOrDefault(p => p.Address.Equals(from));
+            Peer peer = message.Remote;
             if (peer == null)
             {
                 _logger.Information(
