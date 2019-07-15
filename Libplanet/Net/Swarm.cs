@@ -807,15 +807,15 @@ namespace Libplanet.Net
             );
 
             List<Block<T>> blocks = await fetched.ToListAsync(
-                cancellationToken
+                _cancellationToken
             );
             _logger.Debug("GetBlocksAsync() complete.");
 
             try
             {
-                using (await _blockSyncMutex.LockAsync(cancellationToken))
+                using (await _blockSyncMutex.LockAsync(_cancellationToken))
                 {
-                    await AppendBlocksAsync(peer, blocks, cancellationToken);
+                    await AppendBlocksAsync(peer, blocks, _cancellationToken);
                     _logger.Debug("Append complete.");
                 }
             }
@@ -1045,9 +1045,7 @@ namespace Libplanet.Net
             }
         }
 
-        private async Task ProcessTxIds(
-            TxIds message,
-            CancellationToken cancellationToken = default(CancellationToken))
+        private async Task ProcessTxIds(TxIds message)
         {
             _logger.Debug("Trying to fetch txs...");
 
@@ -1069,8 +1067,8 @@ namespace Libplanet.Net
             }
 
             IAsyncEnumerable<Transaction<T>> fetched = GetTxsAsync(
-                peer, unknownTxIds, cancellationToken);
-            List<Transaction<T>> txs = await fetched.ToListAsync(cancellationToken);
+                peer, unknownTxIds, _cancellationToken);
+            List<Transaction<T>> txs = await fetched.ToListAsync(_cancellationToken);
             var toStage = txs.ToDictionary(tx => tx, _ => true);
 
             _blockChain.StageTransactions(toStage);
