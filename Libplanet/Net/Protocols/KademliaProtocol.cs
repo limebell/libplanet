@@ -5,6 +5,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Libplanet.Action;
 using Libplanet.Net.Messages;
@@ -29,11 +30,16 @@ namespace Libplanet.Net.Protocols
         private readonly ConcurrentDictionary<string, ExpectedPong> _expectedPongs;
         private readonly ConcurrentBag<string> _deletedPingids;
         private readonly ConcurrentDictionary<Address, FindRequest> _findRequests;
+        private readonly CancellationToken _cancellationToken;
 
-        public KademliaProtocol(Swarm<T> swarm, int appProtocolVersion)
+        public KademliaProtocol(
+            Swarm<T> swarm,
+            int appProtocolVersion,
+            CancellationToken cancellationToken)
         {
             _swarm = swarm;
             _appProtocolVersion = appProtocolVersion;
+            _cancellationToken = cancellationToken;
             _thisPeer = _swarm.AsPeer;
             _random = new System.Random();
             _routing = new RoutingTable(
@@ -102,6 +108,11 @@ namespace Libplanet.Net.Protocols
             {
                 throw new ArgumentException(
                     $"Argument {nameof(peer)} is equal to self.");
+            }
+
+            if (_cancellationToken.IsCancellationRequested)
+            {
+                return;
             }
 
             if (pingid != null && !_expectedPongs.ContainsKey(pingid))
@@ -342,6 +353,11 @@ namespace Libplanet.Net.Protocols
 
         private async Task ReceiveNeighboursAsync(Peer remote, List<Peer> found)
         {
+            if (_cancellationToken.IsCancellationRequested)
+            {
+                return;
+            }
+
             List<Peer> peers = new List<Peer>();
             List<Task> tasks = new List<Task>();
             foreach (Peer peer in found)
@@ -368,6 +384,11 @@ namespace Libplanet.Net.Protocols
                 Peer closest_known = closest_candidate.Count == 0 ? null : closest_candidate[0];
                 for (int i = 0; i < FindConcurrency && i < peers.Count; i++)
                 {
+                    if (_cancellationToken.IsCancellationRequested)
+                    {
+                        return;
+                    }
+
                     if ((closest_known is null ||
                         string.Compare(
                             Kademlia.CalculateDistance(peers[i].Address, entry.Key).ToHex(),
