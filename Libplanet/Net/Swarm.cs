@@ -260,8 +260,6 @@ namespace Libplanet.Net
             {
                 if (Running)
                 {
-                    _removedPeers[AsPeer] = DateTimeOffset.UtcNow;
-
                     if (_broadcastQueue.Any() || _replyQueue.Any())
                     {
                         await Task.Delay(_linger, cancellationToken);
