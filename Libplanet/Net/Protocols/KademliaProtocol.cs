@@ -166,6 +166,11 @@ namespace Libplanet.Net.Protocols
                 {
                     _routing.BucketOf(ep.Replacement).ReplacementCache.Add(ep.Replacement);
                 }
+
+                if (ep.Bootstrap)
+                {
+                    await DoFindPeerAsync(_thisPeer.Address, ep.Target);
+                }
             }
 
             if (peer != null)
@@ -245,21 +250,19 @@ namespace Libplanet.Net.Protocols
         }
 
 #pragma warning disable
-        internal async Task PingAsync(Peer target, Peer replacement = null)
+        internal async Task PingAsync(Peer target, Peer replacement = null, bool bootstrap = false)
         {
             if (target is null)
             {
                 throw new ArgumentNullException(nameof(target));
             }
 
-            byte[] echoed = new SHA256CryptoServiceProvider()
-                .ComputeHash(Encoding.ASCII.GetBytes(_thisPeer.ToString() + DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()));
+            byte[] echoed = await SendPingAsync(target);
             Log.Debug($"Ping's echo: {ByteUtil.Hex(echoed)}, to [{target.Address.ToHex()}]");
             string pingid = MakePingId(echoed, target);
             DateTimeOffset timeout =
                 DateTimeOffset.UtcNow + TimeSpan.FromMilliseconds(RequestTimeout);
-            _expectedPongs[pingid] = new ExpectedPong(timeout, target, replacement);
-            await SendPingAsync(target, echoed);
+            _expectedPongs[pingid] = new ExpectedPong(timeout, target, replacement, bootstrap);
         }
 #pragma warning restore
 
