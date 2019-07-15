@@ -40,8 +40,6 @@ namespace Libplanet.Net
         private static readonly TimeSpan TurnPermissionLifetime =
             TimeSpan.FromMinutes(5);
 
-        private readonly IDictionary<Peer, DateTimeOffset> _peers;
-        private readonly IDictionary<Peer, DateTimeOffset> _removedPeers;
 
         private readonly BlockChain<T> _blockChain;
         private readonly PrivateKey _privateKey;
@@ -51,7 +49,6 @@ namespace Libplanet.Net
 
         private readonly TimeSpan _dialTimeout;
         private readonly AsyncLock _runningMutex;
-        private readonly AsyncLock _receiveMutex;
         private readonly AsyncLock _blockSyncMutex;
         private readonly string _host;
         private readonly IList<IceServer> _iceServers;
@@ -128,8 +125,6 @@ namespace Libplanet.Net
             _privateKey = privateKey ?? throw new ArgumentNullException(nameof(privateKey));
             _dialTimeout = dialTimeout;
 
-            _peers = new ConcurrentDictionary<Peer, DateTimeOffset>();
-            _removedPeers = new ConcurrentDictionary<Peer, DateTimeOffset>();
             LastSeenTimestamps =
                 new ConcurrentDictionary<Peer, DateTimeOffset>();
 
@@ -149,7 +144,6 @@ namespace Libplanet.Net
             _poller = new NetMQPoller { _router, _replyQueue, _broadcastQueue };
             _replyPoller = new NetMQPoller();
 
-            _receiveMutex = new AsyncLock();
             _blockSyncMutex = new AsyncLock();
             _runningMutex = new AsyncLock();
 
@@ -563,12 +557,6 @@ namespace Libplanet.Net
                 CancellationToken token = default(CancellationToken)
             )
         {
-            if (!_peers.ContainsKey(peer))
-            {
-                throw new PeerNotFoundException(
-                    $"The peer[{peer.Address}] could not be found.");
-            }
-
             var request = new GetBlockHashes(locator, stop);
 
             using (var socket = new DealerSocket(ToNetMQAddress(peer)))
@@ -596,12 +584,6 @@ namespace Libplanet.Net
             Peer peer,
             IEnumerable<HashDigest<SHA256>> blockHashes)
         {
-            if (!_peers.ContainsKey(peer))
-            {
-                throw new PeerNotFoundException(
-                    $"The peer[{peer.Address}] could not be found.");
-            }
-
             return new AsyncEnumerable<Block<T>>(async yield =>
             {
                 CancellationToken yieldToken = yield.CancellationToken;
@@ -650,12 +632,6 @@ namespace Libplanet.Net
             IEnumerable<TxId> txIds,
             CancellationToken cancellationToken = default(CancellationToken))
         {
-            if (!_peers.ContainsKey(peer))
-            {
-                throw new PeerNotFoundException(
-                    $"The peer[{peer.Address}] could not be found.");
-            }
-
             return new AsyncEnumerable<Transaction<T>>(async yield =>
             {
                 using (var socket = new DealerSocket(ToNetMQAddress(peer)))
@@ -827,12 +803,6 @@ namespace Libplanet.Net
                     "BlockHashes doesn't have sender address.");
             }
 
-            Peer peer = _peers.Keys.FirstOrDefault(p => p.Address.Equals(from));
-            if (peer == null)
-            {
-                _logger.Information(
-                    "BlockHashes was sent from unknown peer. ignored.");
-                return;
             }
 
             _logger.Debug(
@@ -1160,7 +1130,7 @@ namespace Libplanet.Net
 
         private bool IsUnknownPeer(Peer sender)
         {
-            Peer existing = _peers.Keys
+            Peer existing = Peers
                 .FirstOrDefault(p => sender.PublicKey.Equals(p.PublicKey));
 
             if (existing is null)
@@ -1171,7 +1141,7 @@ namespace Libplanet.Net
             if (!existing.EndPoint.Equals(sender.EndPoint))
             {
                 // Clear outdated existing peer.
-                _peers.Remove(existing);
+                Peers.Remove(existing);
                 CloseDealer(existing);
 
                 return true;
