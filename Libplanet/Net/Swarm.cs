@@ -63,7 +63,9 @@ namespace Libplanet.Net
 
         private readonly ILogger _logger;
 
-        private IProtocol _protocol;
+#pragma warning disable
+        internal IProtocol _protocol;
+#pragma warning restore
 
         private TaskCompletionSource<object> _runningEvent;
         private int? _listenPort;
@@ -429,6 +431,7 @@ namespace Libplanet.Net
                 }
             }
 
+            // Should give certain time that ensures some connections are built
             await Task.Delay(0);
         }
 
@@ -504,7 +507,7 @@ namespace Libplanet.Net
             {
                 case Ping ping:
                     {
-                        SendPingAsync(peer, ping);
+                        Task.Run(async () => await SendPingAsync(peer, ping));
                         break;
                     }
 
@@ -659,7 +662,7 @@ namespace Libplanet.Net
             });
         }
 
-        private async void SendPingAsync(Peer peer, Ping ping)
+        private async Task SendPingAsync(Peer peer, Ping ping)
         {
             DealerSocket dealer = await GetDealerSocket(peer);
 
@@ -672,20 +675,16 @@ namespace Libplanet.Net
                 dealer.Connect(address);
 
                 _logger.Debug($"Trying to Ping to [{address}]...");
-                await dealer.SendMultipartMessageAsync(
-                    ping.ToNetMQMessage(_privateKey, EndPoint, -1),
-                    cancellationToken: _cancellationToken);
+                dealer.SendMultipartMessage(ping.ToNetMQMessage(_privateKey, EndPoint, -1));
 
                 _logger.Debug($"Waiting for Pong from [{address}]...");
-                NetMQMessage message = await dealer.ReceiveMultipartMessageAsync(
-                    timeout: _dialTimeout,
-                    cancellationToken: _cancellationToken);
+                NetMQMessage message = dealer.ReceiveMultipartMessage();
 
                 Message parsedMessage = Message.Parse(message, true);
                 Pong pong;
                 if (parsedMessage is Pong p)
                 {
-                    _logger.Debug($"Pong received.");
+                    _logger.Debug($"Pong received. from [{p.Remote.Address.ToHex()}]");
                     _protocol.RecvPong(p.Remote, p.Echoed);
                     pong = p;
                 }
@@ -729,6 +728,10 @@ namespace Libplanet.Net
                 dealer.Dispose();
                 throw;
             }
+            catch (Exception e)
+            {
+                _logger.Debug($"Unexpected exception. [{e}]");
+            }
         }
 
         private async void SendFindPeerAsync(Peer peer, FindPeer findPeer)
@@ -757,7 +760,7 @@ namespace Libplanet.Net
                 Neighbours neighbours;
                 if (parsedMessage is Neighbours n)
                 {
-                    _logger.Debug($"Neighbours received.");
+                    _logger.Debug($"Neighbours received. [{n}]");
                     _protocol.RecvNeighbours(n.Remote, n.Found);
                     neighbours = n;
                 }
@@ -966,7 +969,7 @@ namespace Libplanet.Net
 
                 case FindPeer findPeer:
                     {
-                        _logger.Debug($"Findpeer received. [{findPeer}]");
+                        _logger.Debug($"FindPeer received. [{findPeer}]");
                         _protocol.RecvFindPeer(findPeer);
                         break;
                     }
