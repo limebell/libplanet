@@ -1343,6 +1343,10 @@ namespace Libplanet.Net
             {
                 _logger.Error(ex, "Could not parse NetMQMessage properly; ignore.");
             }
+            catch (DifferentAppProtocolVersionException ex)
+            {
+                _logger.Error(ex, "DifferentAppProtocolVersion exception; ignore.");
+            }
             catch (Exception ex)
             {
                 _logger.Error(ex, "An unexpected exception occured during ReceiveReply.");
