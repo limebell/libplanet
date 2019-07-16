@@ -783,7 +783,7 @@ namespace Libplanet.Tests.Net
 
                 /*await swarmC.BlockReceived.WaitAsync();
                 await swarmA.BlockReceived.WaitAsync();*/
-                await Task.Delay(1000);
+                await Task.Delay(5000);
 
                 // chainC may or may not be changed, because swarmC may not
                 // be directly connected to swarmB.
@@ -796,7 +796,7 @@ namespace Libplanet.Tests.Net
 
                 /*await swarmB.BlockReceived.WaitAsync();
                 await swarmC.BlockReceived.WaitAsync();*/
-                await Task.Delay(1000);
+                await Task.Delay(5000);
 
                 Assert.Equal(chainA.AsEnumerable(), chainB);
                 Assert.Equal(chainA.AsEnumerable(), chainC);
@@ -857,7 +857,7 @@ namespace Libplanet.Tests.Net
 
                 swarmB.BroadcastBlocks(new[] { chainB.Last() });
 
-                await Task.Delay(5000);
+                await Task.Delay(10000);
 
                 // chainC may or may not be changed, because swarmC may not
                 // be directly connected to swarmB.
@@ -867,7 +867,7 @@ namespace Libplanet.Tests.Net
 
                 swarmA.BroadcastBlocks(new[] { chainA.Last() });
 
-                await Task.Delay(5000);
+                await Task.Delay(10000);
 
                 for (int i = 1; i < size; i++)
                 {
