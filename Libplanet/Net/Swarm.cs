@@ -423,7 +423,7 @@ namespace Libplanet.Net
             {
                 _logger.Error(
                     e,
-                    "An unexpected exception occured during StartAsync()");
+                    $"An unexpected exception occured during StartAsync() [{e.ToString()}]");
                 throw;
             }
         }
