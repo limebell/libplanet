@@ -815,7 +815,7 @@ namespace Libplanet.Tests.Net
             }
         }
 
-        [Fact(Timeout = Timeout)]
+        [Fact(Timeout = 2 * Timeout)]
         public async Task CanBroadcastBlockMany()
         {
             int size = 10;
@@ -857,7 +857,7 @@ namespace Libplanet.Tests.Net
 
                 swarmB.BroadcastBlocks(new[] { chainB.Last() });
 
-                await Task.Delay(10000);
+                await Task.Delay(20000);
 
                 // chainC may or may not be changed, because swarmC may not
                 // be directly connected to swarmB.
@@ -867,7 +867,7 @@ namespace Libplanet.Tests.Net
 
                 swarmA.BroadcastBlocks(new[] { chainA.Last() });
 
-                await Task.Delay(10000);
+                await Task.Delay(20000);
 
                 for (int i = 1; i < size; i++)
                 {
