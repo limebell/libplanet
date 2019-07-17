@@ -63,7 +63,7 @@ namespace Libplanet.Net
         private readonly NetMQQueue<Message> _replyQueue;
         private readonly NetMQQueue<Message> _broadcastQueue;
         private readonly NetMQPoller _poller;
-        private readonly NetMQPoller _replyPoller;
+        /*private readonly NetMQPoller _replyPoller;*/
 
         private readonly ILogger _logger;
 
@@ -148,7 +148,7 @@ namespace Libplanet.Net
             _replyQueue = new NetMQQueue<Message>();
             _broadcastQueue = new NetMQQueue<Message>();
             _poller = new NetMQPoller { _router, _replyQueue, _broadcastQueue };
-            _replyPoller = new NetMQPoller();
+            /*_replyPoller = new NetMQPoller();*/
 
             _blockSyncMutex = new AsyncLock();
             _runningMutex = new AsyncLock();
@@ -282,10 +282,10 @@ namespace Libplanet.Net
                         _poller.Dispose();
                     }
 
-                    if (_replyPoller.IsRunning)
+                    /*if (_replyPoller.IsRunning)
                     {
                         _replyPoller.Dispose();
-                    }
+                    }*/
 
                     if (_protocol != null)
                     {
@@ -401,7 +401,7 @@ namespace Libplanet.Net
                 {
                     BroadcastTxAsync(broadcastTxInterval, _cancellationToken),
                     Task.Run(() => _poller.Run(), _cancellationToken),
-                    Task.Run(() => _replyPoller.Run(), _cancellationToken),
+                    /*Task.Run(() => _replyPoller.Run(), _cancellationToken),*/
                 };
 
                 tasks.Add(RefreshDealers(_cancellationToken));
@@ -555,7 +555,8 @@ namespace Libplanet.Net
                 {
                     _dealers[peer] = new DealerInfo(dealer, DateTimeOffset.UtcNow + ReplyTimeout);
                     dealer.ReceiveReady += ReceiveReply;
-                    _replyPoller.Add(dealer);
+                    /*_replyPoller.Add(dealer);*/
+                    _poller.Add(dealer);
                 }
                 else
                 {
@@ -786,7 +787,8 @@ namespace Libplanet.Net
                 {
                     if (entry.Value.Timeout < DateTimeOffset.UtcNow)
                     {
-                        _replyPoller.Remove(entry.Value.Socket);
+                        /*_replyPoller.Remove(entry.Value.Socket);*/
+                        _poller.Remove(entry.Value.Socket);
                         entry.Value.Socket.ReceiveReady -= ReceiveReply;
                         entry.Value.Socket.Dispose();
                         ReplyTimeouted.Invoke(this, entry.Key);
@@ -1356,7 +1358,8 @@ namespace Libplanet.Net
             }
             finally
             {
-                _replyPoller.Remove(e.Socket);
+                /*_replyPoller.Remove(e.Socket);*/
+                _poller.Remove(e.Socket);
                 e.Socket.ReceiveReady -= ReceiveReply;
                 e.Socket.Dispose();
             }
