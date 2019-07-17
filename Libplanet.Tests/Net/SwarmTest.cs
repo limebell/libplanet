@@ -200,7 +200,7 @@ namespace Libplanet.Tests.Net
                 await StartAsync(a);
                 await StartAsync(b);
 
-                await b.AddPeersAsync(new[] { a.AsPeer });
+                // await b.AddPeersAsync(new[] { a.AsPeer });
                 await EnsureExchange(a, b);
 
                 await Task.Delay(10000);
@@ -256,7 +256,7 @@ namespace Libplanet.Tests.Net
                     await StartAsync(b);
                     await StartAsync(c);
 
-                    await b.AddPeersAsync(new[] { a.AsPeer });
+                    // await b.AddPeersAsync(new[] { a.AsPeer });
                     await EnsureExchange(a, b);
                     Assert.Equal(
                         new[] { b.AsPeer }.ToImmutableHashSet(),
@@ -265,7 +265,7 @@ namespace Libplanet.Tests.Net
                         new[] { a.AsPeer }.ToImmutableHashSet(),
                         b.Peers.ToImmutableHashSet());
 
-                    await c.AddPeersAsync(new[] { a.AsPeer });
+                    // await c.AddPeersAsync(new[] { a.AsPeer });
                     await EnsureExchange(a, c);
                     await EnsureExchange(a, b);
 
@@ -292,8 +292,8 @@ namespace Libplanet.Tests.Net
 
                 Assert.True(lastDistA < a.LastDistributed);
 
-                await EnsureRecvAsync(b, aAsPeer, a.LastDistributed);
-                await EnsureRecvAsync(c, aAsPeer, a.LastDistributed);
+                /*await EnsureRecvAsync(b, aAsPeer, a.LastDistributed);
+                await EnsureRecvAsync(c, aAsPeer, a.LastDistributed);*/
                 await EnsureExchange(b, c);
 
                 Assert.Equal(new[] { c.AsPeer }.ToImmutableHashSet(), b.Peers.ToImmutableHashSet());
@@ -344,8 +344,8 @@ namespace Libplanet.Tests.Net
 
                 foreach (var peer in peers)
                 {
-                    await a.AddPeersAsync(new[] { peer });
-                    await b.AddPeersAsync(new[] { peer });
+                    // await a.AddPeersAsync(new[] { peer });
+                    // await b.AddPeersAsync(new[] { peer });
                 }
 
                 Assert.Equal(new[] { c.AsPeer }, a.Peers.ToArray());
@@ -389,7 +389,7 @@ namespace Libplanet.Tests.Net
                 await StartAsync(a);
                 await StartAsync(b);
 
-                await a.AddPeersAsync(new[] { b.AsPeer });
+                /*await a.AddPeersAsync(new[] { b.AsPeer });*/
 
                 Assert.True(isCalled);
             }
@@ -440,7 +440,7 @@ namespace Libplanet.Tests.Net
                         new BlockLocator(new[] { genesis.Hash }),
                         null));
 
-                await swarmB.AddPeersAsync(new[] { swarmA.AsPeer });
+                /*await swarmB.AddPeersAsync(new[] { swarmA.AsPeer });*/
 
                 IEnumerable<HashDigest<SHA256>> inventories1 =
                     await swarmB.GetBlockHashesAsync(
@@ -504,7 +504,7 @@ namespace Libplanet.Tests.Net
 
                 var peer = swarmA.AsPeer;
 
-                await swarmB.AddPeersAsync(new[] { peer });
+                /*await swarmB.AddPeersAsync(new[] { peer });*/
 
                 IEnumerable<HashDigest<SHA256>> hashes =
                     await swarmB.GetBlockHashesAsync(
@@ -516,8 +516,8 @@ namespace Libplanet.Tests.Net
                 using (var socket = new DealerSocket(netMQAddress))
                 {
                     var request = new GetBlocks(hashes, 2);
-                    await socket.SendMultipartMessageAsync(
-                        request.ToNetMQMessage(privateKey));
+                    /*await socket.SendMultipartMessageAsync(
+                        request.ToNetMQMessage(privateKey));*/
 
                     NetMQMessage response = await socket.ReceiveMultipartMessageAsync();
                     Message parsedMessage = Message.Parse(response, true);
@@ -568,7 +568,7 @@ namespace Libplanet.Tests.Net
                     () => swarmB.GetTxsAsync(
                         swarmA.AsPeer, new[] { tx.Id }));
 
-                await swarmA.AddPeersAsync(new[] { swarmB.AsPeer });
+                /*await swarmA.AddPeersAsync(new[] { swarmB.AsPeer });*/
 
                 List<Transaction<DumbAction>> txs =
                     await swarmA.GetTxsAsync(
@@ -612,8 +612,8 @@ namespace Libplanet.Tests.Net
                 await StartAsync(swarmB);
                 await StartAsync(swarmC);
 
-                await swarmA.AddPeersAsync(new[] { swarmB.AsPeer });
-                await swarmA.AddPeersAsync(new[] { swarmC.AsPeer });
+                /*await swarmA.AddPeersAsync(new[] { swarmB.AsPeer });
+                await swarmA.AddPeersAsync(new[] { swarmC.AsPeer });*/
 
                 await EnsureExchange(swarmA, swarmB);
                 await EnsureExchange(swarmA, swarmC);
@@ -659,7 +659,7 @@ namespace Libplanet.Tests.Net
                 await StartAsync(swarmA);
                 await StartAsync(swarmB);
 
-                await swarmA.AddPeersAsync(new[] { swarmB.AsPeer });
+                // await swarmA.AddPeersAsync(new[] { swarmB.AsPeer });
                 await swarmB.TxReceived.WaitAsync();
                 Assert.Equal(txA, chainB.Transactions[txA.Id]);
                 Assert.False(chainB.Transactions.ContainsKey(txB.Id));
@@ -699,14 +699,14 @@ namespace Libplanet.Tests.Net
                 await StartAsync(swarmC);
 
                 // Broadcast tx swarmA to swarmB
-                await swarmA.AddPeersAsync(new[] { swarmB.AsPeer });
+                // await swarmA.AddPeersAsync(new[] { swarmB.AsPeer });
                 await swarmB.TxReceived.WaitAsync();
                 Assert.Equal(tx, chainB.Transactions[tx.Id]);
 
                 await swarmA.StopAsync();
 
                 // Re-Broadcast received tx swarmB to swarmC
-                await swarmB.AddPeersAsync(new[] { swarmC.AsPeer });
+                // await swarmB.AddPeersAsync(new[] { swarmC.AsPeer });
                 await swarmC.TxReceived.WaitAsync();
                 Assert.Equal(tx, chainC.Transactions[tx.Id]);
             }
@@ -753,8 +753,8 @@ namespace Libplanet.Tests.Net
                 await StartAsync(swarmB);
                 await StartAsync(swarmC);
 
-                await swarmA.AddPeersAsync(new[] { swarmB.AsPeer });
-                await swarmA.AddPeersAsync(new[] { swarmC.AsPeer });
+                /*await swarmA.AddPeersAsync(new[] { swarmB.AsPeer });
+                await swarmA.AddPeersAsync(new[] { swarmC.AsPeer });*/
 
                 await EnsureExchange(swarmA, swarmB);
                 await EnsureExchange(swarmA, swarmC);
@@ -840,7 +840,7 @@ namespace Libplanet.Tests.Net
             Swarm<DumbAction> b = _swarms[1];
 
             await StartAsync(b);
-            await a.AddPeersAsync(new[] { b.AsPeer });
+            /*await a.AddPeersAsync(new[] { b.AsPeer });*/
 
             Task t = await StartAsync(a);
             await Task.WhenAll(a.StopAsync(), t);
@@ -899,8 +899,8 @@ namespace Libplanet.Tests.Net
                 await StartAsync(swarmA);
                 await StartAsync(swarmB);
 
-                await swarmA.AddPeersAsync(new[] { seed.AsPeer });
-                await swarmB.AddPeersAsync(new[] { seed.AsPeer });
+                /*await swarmA.AddPeersAsync(new[] { seed.AsPeer });
+                await swarmB.AddPeersAsync(new[] { seed.AsPeer });*/
 
                 await EnsureExchange(swarmA, swarmB);
 
@@ -933,7 +933,7 @@ namespace Libplanet.Tests.Net
             try
             {
                 await StartAsync(minerSwarm);
-                await receiverSwarm.AddPeersAsync(new[] { minerSwarm.AsPeer });
+                /*await receiverSwarm.AddPeersAsync(new[] { minerSwarm.AsPeer });*/
 
                 await StartAsync(receiverSwarm);
 
@@ -975,7 +975,7 @@ namespace Libplanet.Tests.Net
             try
             {
                 await StartAsync(minerSwarm);
-                await receiverSwarm.AddPeersAsync(new[] { minerSwarm.AsPeer });
+                /*await receiverSwarm.AddPeersAsync(new[] { minerSwarm.AsPeer });*/
 
                 await receiverSwarm.PreloadAsync(progress);
 
@@ -1015,7 +1015,7 @@ namespace Libplanet.Tests.Net
             return task;
         }
 
-        private async Task EnsureRecvAsync(
+        /*private async Task EnsureRecvAsync(
             Swarm<DumbAction> swarm,
             Peer peer = null,
             DateTimeOffset? lastReceived = null)
@@ -1061,21 +1061,21 @@ namespace Libplanet.Tests.Net
             }
 
             Log.Debug($"Received. [{swarm.AsPeer}]");
-        }
+        }*/
 
         private async Task EnsureExchange(Swarm<DumbAction> a, Swarm<DumbAction> b)
         {
             await a.WaitForRunningAsync();
             await b.WaitForRunningAsync();
 
-            Log.Debug($"Waiting for a[{a.AsPeer}] to distribute... ");
+            /*Log.Debug($"Waiting for a[{a.AsPeer}] to distribute... ");
             await a.DeltaDistributed.WaitAsync();
             Log.Debug($"Waiting for b[{b.AsPeer}] to receive a[{a.AsPeer}]...");
             await EnsureRecvAsync(b, a.AsPeer);
             Log.Debug($"Waiting for b[{b.AsPeer}] to distribute...");
             await b.DeltaDistributed.WaitAsync();
             Log.Debug($"Waiting for a[{a.AsPeer}] to receive b[{b.AsPeer}]...");
-            await EnsureRecvAsync(a, b.AsPeer);
+            await EnsureRecvAsync(a, b.AsPeer);*/
         }
     }
 }
