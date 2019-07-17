@@ -266,7 +266,7 @@ namespace Libplanet.Net.Protocols
                     trace += $"\nBucket {i} : ";
                     foreach (Peer peer in _routing.BucketOf(i).Peers)
                     {
-                        trace += $"[{peer.Address.ToString()}], ";
+                        trace += $"[{peer.Address.ToHex()}], ";
                     }
 
                     trace = trace.TrimEnd(' ', ',');
