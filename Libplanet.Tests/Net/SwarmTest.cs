@@ -835,8 +835,7 @@ namespace Libplanet.Tests.Net
                     Log.Debug($"{swarms[i].Trace()}");
                 }
 
-                await Task.WhenAll(swarms.Skip(1).Take(size - 1)
-                    .Select(s => s.TxReceived.WaitAsync()));
+                await Task.Delay(4000);
 
                 for (int i = 1; i < size; i++)
                 {
