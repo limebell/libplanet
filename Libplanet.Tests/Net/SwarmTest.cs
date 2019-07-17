@@ -430,6 +430,7 @@ namespace Libplanet.Tests.Net
                 await StartAsync(b);
 
                 await a.BootstrapAsync(new[] { b.AsPeer });
+                await Task.Delay(5000);
 
                 Assert.True(isCalled);
             }
@@ -783,7 +784,7 @@ namespace Libplanet.Tests.Net
 
                 /*await swarmC.BlockReceived.WaitAsync();
                 await swarmA.BlockReceived.WaitAsync();*/
-                await Task.Delay(5000);
+                await Task.Delay(10000);
 
                 // chainC may or may not be changed, because swarmC may not
                 // be directly connected to swarmB.
@@ -796,7 +797,7 @@ namespace Libplanet.Tests.Net
 
                 /*await swarmB.BlockReceived.WaitAsync();
                 await swarmC.BlockReceived.WaitAsync();*/
-                await Task.Delay(5000);
+                await Task.Delay(10000);
 
                 Assert.Equal(chainA.AsEnumerable(), chainB);
                 Assert.Equal(chainA.AsEnumerable(), chainC);
@@ -810,79 +811,6 @@ namespace Libplanet.Tests.Net
             }
 
             for (int i = 0; i < 3; i++)
-            {
-                Log.Debug($"{_swarms[i].Trace()}");
-            }
-        }
-
-        [Fact(Timeout = 2 * Timeout)]
-        public async Task CanBroadcastBlockMany()
-        {
-            int size = 10;
-
-            Assert.True(size <= Count);
-
-            Swarm<DumbAction> swarmA = _swarms[0];
-            Swarm<DumbAction> swarmB = _swarms[1];
-
-            BlockChain<DumbAction> chainA = _blockchains[0];
-            BlockChain<DumbAction> chainB = _blockchains[1];
-
-            // chainA, chainB and chainC shares genesis block.
-            Block<DumbAction> genesis = chainA.MineBlock(_fx[0].Address1);
-            for (int i = 1; i < size; i++)
-            {
-                _blockchains[i].Append(genesis);
-            }
-
-            foreach (int i in Enumerable.Range(0, 10))
-            {
-                chainA.MineBlock(_fx[0].Address1);
-                await Task.Delay(100);
-            }
-
-            foreach (int i in Enumerable.Range(0, 3))
-            {
-                chainB.MineBlock(_fx[1].Address1);
-                await Task.Delay(100);
-            }
-
-            try
-            {
-                await Task.WhenAll(_swarms.Take(size).Select(s => StartAsync(s)));
-
-                await Task.WhenAll(_swarms.Skip(1).Take(size - 1)
-                    .Select(s => Task.Run(() => s.BootstrapAsync(
-                        new List<Peer> { _swarms[0].AsPeer }).Wait())));
-
-                swarmB.BroadcastBlocks(new[] { chainB.Last() });
-
-                await Task.Delay(20000);
-
-                // chainC may or may not be changed, because swarmC may not
-                // be directly connected to swarmB.
-                // chainB doesn't applied to chainA since chainB is shorter
-                // than chainA.
-                Assert.NotEqual(chainB.AsEnumerable(), chainA);
-
-                swarmA.BroadcastBlocks(new[] { chainA.Last() });
-
-                await Task.Delay(20000);
-
-                for (int i = 1; i < size; i++)
-                {
-                    Assert.Equal(chainA.AsEnumerable(), _blockchains[i]);
-                }
-            }
-            finally
-            {
-                for (int i = 0; i < size; i++)
-                {
-                    await _swarms[i].StopAsync();
-                }
-            }
-
-            for (int i = 0; i < size; i++)
             {
                 Log.Debug($"{_swarms[i].Trace()}");
             }
