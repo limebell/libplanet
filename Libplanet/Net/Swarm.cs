@@ -1291,7 +1291,9 @@ namespace Libplanet.Net
                 _logger.Debug($"The message[{message}] has parsed.");
 
                 // it's still async because some method it relies are async yet.
-                _ = ProcessMessageAsync(message);
+#pragma warning disable CS4014 // 이 호출을 대기하지 않으므로 호출이 완료되기 전에 현재 메서드가 계속 실행됩니다.
+                ProcessMessageAsync(message);
+#pragma warning restore CS4014 // 이 호출을 대기하지 않으므로 호출이 완료되기 전에 현재 메서드가 계속 실행됩니다.
                 MessageReceived.Invoke(this, message);
             }
             catch (InvalidMessageException ex)

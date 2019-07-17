@@ -159,7 +159,9 @@ namespace Libplanet.Net.Protocols
                     await _routing.RemovePeerAsync(ep.Target);
                     if (ep.Replacement != null)
                     {
-                        _ = UpdateAsync(ep.Replacement);
+#pragma warning disable CS4014 // 이 호출을 대기하지 않으므로 호출이 완료되기 전에 현재 메서드가 계속 실행됩니다.
+                        UpdateAsync(ep.Replacement);
+#pragma warning restore CS4014 // 이 호출을 대기하지 않으므로 호출이 완료되기 전에 현재 메서드가 계속 실행됩니다.
                     }
 
                     if (peer != null && ep.Target.Address.Equals(peer.Address))
@@ -223,7 +225,9 @@ namespace Libplanet.Net.Protocols
 
         public void Timeout(object sender, Peer peer)
         {
-            _ = UpdateAsync(null);
+#pragma warning disable CS4014 // 이 호출을 대기하지 않으므로 호출이 완료되기 전에 현재 메서드가 계속 실행됩니다.
+            UpdateAsync(null);
+#pragma warning restore CS4014 // 이 호출을 대기하지 않으므로 호출이 완료되기 전에 현재 메서드가 계속 실행됩니다.
         }
 
         public void ReceiveMessage(object sender, Message message)
@@ -250,7 +254,9 @@ namespace Libplanet.Net.Protocols
                     break;
 
                 default:
-                    _ = UpdateAsync(message.Remote);
+#pragma warning disable CS4014 // 이 호출을 대기하지 않으므로 호출이 완료되기 전에 현재 메서드가 계속 실행됩니다.
+                    UpdateAsync(message.Remote);
+#pragma warning restore CS4014 // 이 호출을 대기하지 않으므로 호출이 완료되기 전에 현재 메서드가 계속 실행됩니다.
                     break;
             }
         }
