@@ -423,7 +423,7 @@ namespace Libplanet.Net
             {
                 _logger.Error(
                     e,
-                    "An unexpected exception occured during StartAsync()");
+                    $"An unexpected exception occured during StartAsync() [{e.ToString()}]");
                 throw;
             }
         }
@@ -561,6 +561,8 @@ namespace Libplanet.Net
                 {
                     dealer.Dispose();
                 }
+
+                _logger.Debug($"[{message}] sent to [{peer.Address.ToHex()}({address})]");
             }
             catch (IOException)
             {
