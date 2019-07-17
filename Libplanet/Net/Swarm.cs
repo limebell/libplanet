@@ -404,7 +404,7 @@ namespace Libplanet.Net
                     /*Task.Run(() => _replyPoller.Run(), _cancellationToken),*/
                 };
 
-                tasks.Add(RefreshDealers(_cancellationToken));
+                /*tasks.Add(RefreshDealers(_cancellationToken));*/
 
                 if (behindNAT)
                 {
