@@ -561,6 +561,8 @@ namespace Libplanet.Net
                 {
                     dealer.Dispose();
                 }
+
+                _logger.Debug($"[{message}] sent to [{peer.Address.ToHex()}({address})]");
             }
             catch (IOException)
             {
