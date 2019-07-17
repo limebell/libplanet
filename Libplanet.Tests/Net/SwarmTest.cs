@@ -27,14 +27,13 @@ namespace Libplanet.Tests.Net
 {
     public class SwarmTest : IDisposable
     {
-        private const int Count = 20;
+        private const int Count = 10;
         private const int Timeout = 60 * 1000;
         private const int DisposeTimeout = 5 * 1000;
 
         private readonly FileStoreFixture[] _fx;
 
         private readonly BlockChain<DumbAction>[] _blockchains;
-        private readonly Swarm<DumbAction>[] _swarms;
 
         public SwarmTest(ITestOutputHelper output)
         {
@@ -50,16 +49,10 @@ namespace Libplanet.Tests.Net
             var policy = new BlockPolicy<DumbAction>();
             _fx = new FileStoreFixture[Count];
             _blockchains = new BlockChain<DumbAction>[Count];
-            _swarms = new Swarm<DumbAction>[Count];
             for (int i = 0; i < Count; i++)
             {
                 _fx[i] = new FileStoreFixture();
                 _blockchains[i] = new BlockChain<DumbAction>(policy, _fx[i].Store);
-                _swarms[i] = new Swarm<DumbAction>(
-                    _blockchains[i],
-                    new PrivateKey(),
-                    appProtocolVersion: 1,
-                    host: IPAddress.Loopback.ToString());
             }
         }
 
@@ -70,21 +63,20 @@ namespace Libplanet.Tests.Net
                 _fx[i].Dispose();
             }
 
-            foreach (Swarm<DumbAction> s in _swarms)
+            if (!(Type.GetType("Mono.Runtime") is null))
             {
-                if (s.Running)
-                {
-                    s.StopAsync().Wait(DisposeTimeout);
-                }
+                NetMQConfig.Cleanup(false);
             }
-
-            NetMQConfig.Cleanup(false);
         }
 
         [Fact(Timeout = Timeout)]
         public async Task CanNotStartTwice()
         {
-            Swarm<DumbAction> swarm = _swarms[0];
+            Swarm<DumbAction> swarm = new Swarm<DumbAction>(
+                    _blockchains[0],
+                    new PrivateKey(),
+                    appProtocolVersion: 1,
+                    host: IPAddress.Loopback.ToString());
 
             Task t = await Task.WhenAny(
                 swarm.StartAsync(),
@@ -100,7 +92,11 @@ namespace Libplanet.Tests.Net
         [Fact(Timeout = Timeout)]
         public async Task StopAsync()
         {
-            Swarm<DumbAction> swarm = _swarms[0];
+            Swarm<DumbAction> swarm = new Swarm<DumbAction>(
+                    _blockchains[0],
+                    new PrivateKey(),
+                    appProtocolVersion: 1,
+                    host: IPAddress.Loopback.ToString());
             BlockChain<DumbAction> chain = _blockchains[0];
 
             await swarm.StopAsync();
@@ -117,7 +113,11 @@ namespace Libplanet.Tests.Net
         [Fact(Timeout = Timeout)]
         public async Task CanWaitForRunning()
         {
-            Swarm<DumbAction> swarm = _swarms[0];
+            Swarm<DumbAction> swarm = new Swarm<DumbAction>(
+                    _blockchains[0],
+                    new PrivateKey(),
+                    appProtocolVersion: 1,
+                    host: IPAddress.Loopback.ToString());
             BlockChain<DumbAction> chain = _blockchains[0];
 
             Assert.False(swarm.Running);
@@ -145,75 +145,90 @@ namespace Libplanet.Tests.Net
         [Fact(Timeout = Timeout)]
         public async Task Ping()
         {
-            int size = 3;
-
-            Assert.True(size <= Count);
+            Swarm<DumbAction> swarmA = new Swarm<DumbAction>(
+                    _blockchains[0],
+                    new PrivateKey(),
+                    appProtocolVersion: 1,
+                    host: IPAddress.Loopback.ToString());
+            Swarm<DumbAction> swarmB = new Swarm<DumbAction>(
+                    _blockchains[1],
+                    new PrivateKey(),
+                    appProtocolVersion: 1,
+                    host: IPAddress.Loopback.ToString());
+            Swarm<DumbAction> swarmC = new Swarm<DumbAction>(
+                    _blockchains[2],
+                    new PrivateKey(),
+                    appProtocolVersion: 1,
+                    host: IPAddress.Loopback.ToString());
 
             try
             {
-                // await _swarms.Take(size).ParallelForEachAsync(async s => await StartAsync(s));
-                await Task.WhenAll(_swarms.Take(size).Select(s => StartAsync(s)));
-                KademliaProtocol<DumbAction> kp =
-                    (KademliaProtocol<DumbAction>)_swarms[0]._protocol;
+                await StartAsync(swarmA);
+                await StartAsync(swarmB);
+                await StartAsync(swarmC);
 
-                await Task.WhenAll(_swarms.Skip(1).Take(size - 1)
-                    .Select(s => Task.Run(() => kp.PingAsync(s.AsPeer).Wait())));
+                KademliaProtocol<DumbAction> kp =
+                    (KademliaProtocol<DumbAction>)swarmA._protocol;
+
+                await Task.WhenAll(
+                    kp.PingAsync(swarmB.AsPeer),
+                    kp.PingAsync(swarmC.AsPeer));
 
                 await Task.Delay(1000);
             }
             finally
             {
-                for (int i = 0; i < size; i++)
-                {
-                    await _swarms[i].StopAsync();
-                }
+                await swarmA.StopAsync();
+                await swarmB.StopAsync();
+                await swarmC.StopAsync();
             }
 
-            for (int i = 1; i < size; i++)
-            {
-                Log.Debug(
-                    $"Swarm {i} contains peer 0? [{_swarms[i].Peers.Contains(_swarms[0].AsPeer)}]");
-                Log.Debug(
-                    $"Swarm 0 contains peer {i}? [{_swarms[0].Peers.Contains(_swarms[i].AsPeer)}]");
-            }
-
-            for (int i = 1; i < size; i++)
-            {
-                Assert.Contains(_swarms[0].AsPeer, _swarms[i].Peers);
-                Assert.Contains(_swarms[i].AsPeer, _swarms[0].Peers);
-            }
+            Assert.Contains(swarmA.AsPeer, swarmB.Peers);
+            Assert.Contains(swarmB.AsPeer, swarmA.Peers);
+            Assert.Contains(swarmA.AsPeer, swarmC.Peers);
+            Assert.Contains(swarmC.AsPeer, swarmA.Peers);
         }
 
         [Fact(Timeout = Timeout)]
         public async Task PingToClosedPeer()
         {
-            Assert.True(2 <= Count);
+            Swarm<DumbAction> swarmA = new Swarm<DumbAction>(
+                    _blockchains[0],
+                    new PrivateKey(),
+                    appProtocolVersion: 1,
+                    host: IPAddress.Loopback.ToString());
+            Swarm<DumbAction> swarmB = new Swarm<DumbAction>(
+                    _blockchains[1],
+                    new PrivateKey(),
+                    appProtocolVersion: 1,
+                    host: IPAddress.Loopback.ToString());
 
             try
             {
-                await Task.WhenAll(_swarms.Take(2).Select(s => StartAsync(s)));
+                await StartAsync(swarmA);
+                await StartAsync(swarmB);
 
                 KademliaProtocol<DumbAction> kp =
-                    (KademliaProtocol<DumbAction>)_swarms[0]._protocol;
+                    (KademliaProtocol<DumbAction>)swarmA._protocol;
 
-                Peer peer = _swarms[1].AsPeer;
+                Peer peer = swarmB.AsPeer;
                 await kp.PingAsync(peer);
                 await Task.Delay(300);
 
-                Assert.Contains(peer, _swarms[0].Peers);
+                Assert.Contains(peer, swarmA.Peers);
 
-                await _swarms[1].StopAsync();
+                await swarmB.StopAsync();
                 await kp.PingAsync(peer);
                 await Task.Delay(1500);
 
-                Assert.DoesNotContain(peer, _swarms[0].Peers);
+                Assert.DoesNotContain(peer, swarmA.Peers);
             }
             finally
             {
-                await _swarms[0].StopAsync();
-                if (_swarms[1].Running)
+                await swarmA.StopAsync();
+                if (swarmB.Running)
                 {
-                    await _swarms[1].StopAsync();
+                    await swarmB.StopAsync();
                 }
             }
         }
@@ -221,89 +236,119 @@ namespace Libplanet.Tests.Net
         [Fact(Timeout = Timeout)]
         public async Task BootstrapSingle()
         {
-            Swarm<DumbAction> a = _swarms[0];
-            Swarm<DumbAction> b = _swarms[1];
+            Swarm<DumbAction> swarmA = new Swarm<DumbAction>(
+                       _blockchains[0],
+                       new PrivateKey(),
+                       appProtocolVersion: 1,
+                       host: IPAddress.Loopback.ToString());
+            Swarm<DumbAction> swarmB = new Swarm<DumbAction>(
+                    _blockchains[1],
+                    new PrivateKey(),
+                    appProtocolVersion: 1,
+                    host: IPAddress.Loopback.ToString());
 
             try
             {
-                await StartAsync(a);
-                await StartAsync(b);
+                await StartAsync(swarmA);
+                await StartAsync(swarmB);
 
-                await b.BootstrapAsync(new List<Peer> { a.AsPeer });
+                await swarmB.BootstrapAsync(new List<Peer> { swarmA.AsPeer });
                 await Task.Delay(100);
             }
             finally
             {
-                await a.StopAsync();
-                await b.StopAsync();
+                await swarmA.StopAsync();
+                await swarmB.StopAsync();
             }
 
-            Log.Debug($"Swarm A has peer: {a.Peers.Count}");
-            Log.Debug($"Swarm B has peer: {b.Peers.Count}");
+            Log.Debug($"Swarm A has peer: {swarmA.Peers.Count}");
+            Log.Debug($"Swarm B has peer: {swarmB.Peers.Count}");
 
-            Assert.Equal(1, a.Peers.Count);
-            Assert.Equal(1, b.Peers.Count);
+            Assert.Equal(1, swarmA.Peers.Count);
+            Assert.Equal(1, swarmB.Peers.Count);
         }
 
         [Fact(Timeout = Timeout)]
         public async Task BootstrapTwo()
         {
-            Swarm<DumbAction> a = _swarms[0];
-            Swarm<DumbAction> b = _swarms[1];
-            Swarm<DumbAction> c = _swarms[2];
+            Swarm<DumbAction> swarmA = new Swarm<DumbAction>(
+                    _blockchains[0],
+                    new PrivateKey(),
+                    appProtocolVersion: 1,
+                    host: IPAddress.Loopback.ToString());
+            Swarm<DumbAction> swarmB = new Swarm<DumbAction>(
+                    _blockchains[1],
+                    new PrivateKey(),
+                    appProtocolVersion: 1,
+                    host: IPAddress.Loopback.ToString());
+            Swarm<DumbAction> swarmC = new Swarm<DumbAction>(
+                    _blockchains[2],
+                    new PrivateKey(),
+                    appProtocolVersion: 1,
+                    host: IPAddress.Loopback.ToString());
 
             try
             {
-                await StartAsync(a);
-                await StartAsync(b);
-                await StartAsync(c);
+                await StartAsync(swarmA);
+                await StartAsync(swarmB);
+                await StartAsync(swarmC);
 
-                await b.BootstrapAsync(new List<Peer> { a.AsPeer });
+                await swarmB.BootstrapAsync(new List<Peer> { swarmA.AsPeer });
                 await Task.Delay(500);
 
-                await c.BootstrapAsync(new List<Peer> { a.AsPeer });
+                await swarmC.BootstrapAsync(new List<Peer> { swarmA.AsPeer });
                 await Task.Delay(500);
             }
             finally
             {
-                await a.StopAsync();
-                await b.StopAsync();
-                await c.StopAsync();
+                await swarmA.StopAsync();
+                await swarmB.StopAsync();
+                await swarmC.StopAsync();
             }
 
-            Log.Debug($"Swarm A has peer: {a.Peers.Count}");
-            Log.Debug($"Swarm B has peer: {b.Peers.Count}");
-            Log.Debug($"Swarm C has peer: {c.Peers.Count}");
+            Log.Debug($"Swarm A has peer: {swarmA.Peers.Count}");
+            Log.Debug($"Swarm B has peer: {swarmB.Peers.Count}");
+            Log.Debug($"Swarm C has peer: {swarmC.Peers.Count}");
 
-            Assert.Equal(2, a.Peers.Count);
-            Assert.Equal(2, b.Peers.Count);
-            Assert.Equal(2, c.Peers.Count);
+            Assert.Equal(2, swarmA.Peers.Count);
+            Assert.Equal(2, swarmB.Peers.Count);
+            Assert.Equal(2, swarmC.Peers.Count);
         }
 
         [Fact(Timeout = 2 * Timeout)]
         public async Task BootstrapMany()
         {
-            int size = 16;
+            int size = 10;
 
             Assert.True(size <= Count);
+            List<Swarm<DumbAction>> swarms = new List<Swarm<DumbAction>>();
+            for (int i = 0; i < size; i++)
+            {
+                swarms.Add(
+                    new Swarm<DumbAction>(
+                    _blockchains[i],
+                    new PrivateKey(),
+                    appProtocolVersion: 1,
+                    host: IPAddress.Loopback.ToString()));
+            }
 
             try
             {
-                await Task.WhenAll(_swarms.Take(size).Select(s => StartAsync(s)));
+                await Task.WhenAll(swarms.Take(size).Select(s => StartAsync(s)));
 
-                await Task.WhenAll(_swarms.Skip(1).Take(size - 2)
+                await Task.WhenAll(swarms.Skip(1).Take(size - 2)
                     .Select(s => Task.Run(() => s.BootstrapAsync(
-                        new List<Peer> { _swarms[0].AsPeer }).Wait())));
+                        new List<Peer> { swarms[0].AsPeer }).Wait())));
 
                 await Task.Delay(1000);
-                await _swarms[size - 1].BootstrapAsync(new List<Peer> { _swarms[0].AsPeer });
+                await swarms[size - 1].BootstrapAsync(new List<Peer> { swarms[0].AsPeer });
                 await Task.Delay(1000);
             }
             finally
             {
                 for (int i = 0; i < size; i++)
                 {
-                    await _swarms[i].StopAsync();
+                    await swarms[i].StopAsync();
                 }
             }
 
@@ -312,33 +357,41 @@ namespace Libplanet.Tests.Net
                 string peerList = string.Empty;
                 for (int j = 0; j < size; j++)
                 {
-                    if (_swarms[i].Peers.Contains(_swarms[j].AsPeer))
+                    if (swarms[i].Peers.Contains(swarms[j].AsPeer))
                     {
                         Assert.NotEqual(i, j);
                         peerList += j.ToString() + ", ";
                     }
                 }
 
-                Log.Debug($"Swarm [{i}] has peer: {_swarms[i].Peers.Count}");
+                Log.Debug($"Swarm [{i}] has peer: {swarms[i].Peers.Count}");
                 Log.Debug($"Which are : {peerList.TrimEnd(new char[] { ' ', ',' })}");
             }
 
             string whatttt = string.Empty;
-            foreach (Peer peer in _swarms[9].Peers)
+            foreach (Peer peer in swarms[size - 1].Peers)
             {
                 whatttt += $"[{peer.Address.ToHex()}]";
             }
 
-            Log.Debug($"swarm9 contains {whatttt}");
+            Log.Debug($"swarm {size - 1} contains {whatttt}");
 
-            Assert.Equal(size - 1, _swarms[size - 1].Peers.Count);
+            Assert.Equal(size - 1, swarms[size - 1].Peers.Count);
         }
 
         [Fact(Timeout = Timeout)]
         public async Task BroadcastWhileMining()
         {
-            Swarm<DumbAction> a = _swarms[0];
-            Swarm<DumbAction> b = _swarms[1];
+            Swarm<DumbAction> swarmA = new Swarm<DumbAction>(
+                    _blockchains[0],
+                    new PrivateKey(),
+                    appProtocolVersion: 1,
+                    host: IPAddress.Loopback.ToString());
+            Swarm<DumbAction> swarmB = new Swarm<DumbAction>(
+                    _blockchains[1],
+                    new PrivateKey(),
+                    appProtocolVersion: 1,
+                    host: IPAddress.Loopback.ToString());
 
             BlockChain<DumbAction> chainA = _blockchains[0];
             BlockChain<DumbAction> chainB = _blockchains[1];
@@ -368,16 +421,16 @@ namespace Libplanet.Tests.Net
             }
 
             var minerCanceller = new CancellationTokenSource();
-            Task miningA = CreateMiner(a, chainA, 5000, minerCanceller.Token);
-            Task miningB = CreateMiner(b, chainB, 8000, minerCanceller.Token);
+            Task miningA = CreateMiner(swarmA, chainA, 5000, minerCanceller.Token);
+            Task miningB = CreateMiner(swarmB, chainB, 8000, minerCanceller.Token);
 
             try
             {
-                await StartAsync(a);
-                await StartAsync(b);
+                await StartAsync(swarmA);
+                await StartAsync(swarmB);
 
-                KademliaProtocol<DumbAction> kp = (KademliaProtocol<DumbAction>)a._protocol;
-                await kp.PingAsync(b.AsPeer);
+                KademliaProtocol<DumbAction> kp = (KademliaProtocol<DumbAction>)swarmA._protocol;
+                await kp.PingAsync(swarmB.AsPeer);
 
                 await Task.Delay(10000);
                 minerCanceller.Cancel();
@@ -388,8 +441,8 @@ namespace Libplanet.Tests.Net
             }
             finally
             {
-                await a.StopAsync();
-                await b.StopAsync();
+                await swarmA.StopAsync();
+                await swarmB.StopAsync();
             }
 
             Log.Debug($"chainA: {string.Join(",", chainA)}");
@@ -444,7 +497,11 @@ namespace Libplanet.Tests.Net
         [Fact(Timeout = Timeout)]
         public async Task Cancel()
         {
-            Swarm<DumbAction> swarm = _swarms[0];
+            Swarm<DumbAction> swarm = new Swarm<DumbAction>(
+                    _blockchains[0],
+                    new PrivateKey(),
+                    appProtocolVersion: 1,
+                    host: IPAddress.Loopback.ToString());
             var cts = new CancellationTokenSource();
 
             Task task = await StartAsync(
@@ -459,8 +516,16 @@ namespace Libplanet.Tests.Net
         [Fact(Timeout = Timeout)]
         public async Task CanGetBlock()
         {
-            Swarm<DumbAction> swarmA = _swarms[0];
-            Swarm<DumbAction> swarmB = _swarms[1];
+            Swarm<DumbAction> swarmA = new Swarm<DumbAction>(
+                    _blockchains[0],
+                    new PrivateKey(),
+                    appProtocolVersion: 1,
+                    host: IPAddress.Loopback.ToString());
+            Swarm<DumbAction> swarmB = new Swarm<DumbAction>(
+                    _blockchains[1],
+                    new PrivateKey(),
+                    appProtocolVersion: 1,
+                    host: IPAddress.Loopback.ToString());
 
             BlockChain<DumbAction> chainA = _blockchains[0];
             BlockChain<DumbAction> chainB = _blockchains[1];
@@ -520,12 +585,16 @@ namespace Libplanet.Tests.Net
             BlockChain<DumbAction> chainA = _blockchains[0];
             BlockChain<DumbAction> chainB = _blockchains[1];
 
-            Swarm<DumbAction> swarmA = _swarms[0];
+            Swarm<DumbAction> swarmA = new Swarm<DumbAction>(
+                    chainA,
+                    new PrivateKey(),
+                    appProtocolVersion: 1,
+                    host: IPAddress.Loopback.ToString());
             Swarm<DumbAction> swarmB = new Swarm<DumbAction>(
-                chainB,
-                privateKey,
-                1,
-                host: IPAddress.Loopback.ToString());
+                    chainB,
+                    privateKey,
+                    1,
+                    host: IPAddress.Loopback.ToString());
 
             Block<DumbAction> genesis = chainA.MineBlock(_fx[0].Address1);
             chainB.Append(genesis); // chainA and chainB shares genesis block.
@@ -579,10 +648,17 @@ namespace Libplanet.Tests.Net
         [Fact(Timeout = Timeout)]
         public async Task GetTx()
         {
-            Swarm<DumbAction> swarmA = _swarms[0];
-            Swarm<DumbAction> swarmB = _swarms[1];
+            Swarm<DumbAction> swarmA = new Swarm<DumbAction>(
+                    _blockchains[0],
+                    new PrivateKey(),
+                    appProtocolVersion: 1,
+                    host: IPAddress.Loopback.ToString());
+            Swarm<DumbAction> swarmB = new Swarm<DumbAction>(
+                    _blockchains[1],
+                    new PrivateKey(),
+                    appProtocolVersion: 1,
+                    host: IPAddress.Loopback.ToString());
 
-            BlockChain<DumbAction> chainA = _blockchains[0];
             BlockChain<DumbAction> chainB = _blockchains[1];
 
             Transaction<DumbAction> tx = Transaction<DumbAction>.Create(
@@ -619,8 +695,16 @@ namespace Libplanet.Tests.Net
         [Fact(Timeout = Timeout)]
         public async Task TxStagedNotToBroadcast()
         {
-            Swarm<DumbAction> swarmA = _swarms[0];
-            Swarm<DumbAction> swarmB = _swarms[1];
+            Swarm<DumbAction> swarmA = new Swarm<DumbAction>(
+                    _blockchains[0],
+                    new PrivateKey(),
+                    appProtocolVersion: 1,
+                    host: IPAddress.Loopback.ToString());
+            Swarm<DumbAction> swarmB = new Swarm<DumbAction>(
+                    _blockchains[1],
+                    new PrivateKey(),
+                    appProtocolVersion: 1,
+                    host: IPAddress.Loopback.ToString());
 
             BlockChain<DumbAction> chainA = _blockchains[0];
             BlockChain<DumbAction> chainB = _blockchains[1];
@@ -655,9 +739,21 @@ namespace Libplanet.Tests.Net
         [Fact(Timeout = Timeout)]
         public async Task BroadcastTxAsync()
         {
-            Swarm<DumbAction> swarmA = _swarms[0];
-            Swarm<DumbAction> swarmB = _swarms[1];
-            Swarm<DumbAction> swarmC = _swarms[2];
+            Swarm<DumbAction> swarmA = new Swarm<DumbAction>(
+                    _blockchains[0],
+                    new PrivateKey(),
+                    appProtocolVersion: 1,
+                    host: IPAddress.Loopback.ToString());
+            Swarm<DumbAction> swarmB = new Swarm<DumbAction>(
+                    _blockchains[1],
+                    new PrivateKey(),
+                    appProtocolVersion: 1,
+                    host: IPAddress.Loopback.ToString());
+            Swarm<DumbAction> swarmC = new Swarm<DumbAction>(
+                    _blockchains[2],
+                    new PrivateKey(),
+                    appProtocolVersion: 1,
+                    host: IPAddress.Loopback.ToString());
 
             BlockChain<DumbAction> chainA = _blockchains[0];
             BlockChain<DumbAction> chainB = _blockchains[1];
@@ -706,6 +802,16 @@ namespace Libplanet.Tests.Net
 
             Assert.True(size <= Count);
 
+            List<Swarm<DumbAction>> swarms = new List<Swarm<DumbAction>>();
+            for (int i = 0; i < size; i++)
+            {
+                swarms.Add(new Swarm<DumbAction>(
+                    _blockchains[i],
+                    new PrivateKey(),
+                    appProtocolVersion: 1,
+                    host: IPAddress.Loopback.ToString()));
+            }
+
             Transaction<DumbAction> tx = Transaction<DumbAction>.Create(
                 0,
                 new PrivateKey(),
@@ -717,14 +823,19 @@ namespace Libplanet.Tests.Net
 
             try
             {
-                await Task.WhenAll(_swarms.Take(size).Select(s => StartAsync(s)));
-                await Task.WhenAll(_swarms.Skip(1).Take(size - 1)
+                await Task.WhenAll(swarms.Take(size).Select(s => StartAsync(s)));
+                await Task.WhenAll(swarms.Skip(1).Take(size - 1)
                     .Select(s => Task.Run(() => s.BootstrapAsync(
-                        new List<Peer> { _swarms[0].AsPeer }).Wait())));
+                        new List<Peer> { swarms[0].AsPeer }).Wait())));
 
                 await Task.Delay(1000);
 
-                await Task.WhenAll(_swarms.Skip(1).Take(size - 1)
+                for (int i = 0; i < size; i++)
+                {
+                    Log.Debug($"{swarms[i].Trace()}");
+                }
+
+                await Task.WhenAll(swarms.Skip(1).Take(size - 1)
                     .Select(s => s.TxReceived.WaitAsync()));
 
                 for (int i = 1; i < size; i++)
@@ -734,21 +845,33 @@ namespace Libplanet.Tests.Net
             }
             finally
             {
-                await Task.WhenAll(_swarms.Take(size).Select(s => s.StopAsync()));
+                await Task.WhenAll(swarms.Take(size).Select(s => s.StopAsync()));
             }
 
             for (int i = 0; i < size; i++)
             {
-                Log.Debug($"{_swarms[i].Trace()}");
+                Log.Debug($"{swarms[i].Trace()}");
             }
         }
 
         [Fact(Timeout = Timeout)]
         public async Task CanBroadcastBlock()
         {
-            Swarm<DumbAction> swarmA = _swarms[0];
-            Swarm<DumbAction> swarmB = _swarms[1];
-            Swarm<DumbAction> swarmC = _swarms[2];
+            Swarm<DumbAction> swarmA = new Swarm<DumbAction>(
+                    _blockchains[0],
+                    new PrivateKey(),
+                    appProtocolVersion: 1,
+                    host: IPAddress.Loopback.ToString());
+            Swarm<DumbAction> swarmB = new Swarm<DumbAction>(
+                    _blockchains[1],
+                    new PrivateKey(),
+                    appProtocolVersion: 1,
+                    host: IPAddress.Loopback.ToString());
+            Swarm<DumbAction> swarmC = new Swarm<DumbAction>(
+                    _blockchains[2],
+                    new PrivateKey(),
+                    appProtocolVersion: 1,
+                    host: IPAddress.Loopback.ToString());
 
             BlockChain<DumbAction> chainA = _blockchains[0];
             BlockChain<DumbAction> chainB = _blockchains[1];
@@ -812,7 +935,9 @@ namespace Libplanet.Tests.Net
 
             for (int i = 0; i < 3; i++)
             {
-                Log.Debug($"{_swarms[i].Trace()}");
+                Log.Debug($"{swarmA.Trace()}");
+                Log.Debug($"{swarmB.Trace()}");
+                Log.Debug($"{swarmC.Trace()}");
             }
         }
 
@@ -864,8 +989,11 @@ namespace Libplanet.Tests.Net
         [Fact(Timeout = Timeout)]
         public async Task CanStopGracefullyWhileStarting()
         {
-            Swarm<DumbAction> a = _swarms[0];
-
+            Swarm<DumbAction> a = new Swarm<DumbAction>(
+                    _blockchains[0],
+                    new PrivateKey(),
+                    appProtocolVersion: 1,
+                    host: IPAddress.Loopback.ToString());
             Task t = await StartAsync(a);
             await Task.WhenAll(a.StopAsync(), t);
         }
@@ -941,8 +1069,16 @@ namespace Libplanet.Tests.Net
         [Fact(Timeout = Timeout)]
         public async Task InitialBlockDownload()
         {
-            Swarm<DumbAction> minerSwarm = _swarms[0];
-            Swarm<DumbAction> receiverSwarm = _swarms[1];
+            Swarm<DumbAction> minerSwarm = new Swarm<DumbAction>(
+                    _blockchains[0],
+                    new PrivateKey(),
+                    appProtocolVersion: 1,
+                    host: IPAddress.Loopback.ToString());
+            Swarm<DumbAction> receiverSwarm = new Swarm<DumbAction>(
+                    _blockchains[1],
+                    new PrivateKey(),
+                    appProtocolVersion: 1,
+                    host: IPAddress.Loopback.ToString());
 
             BlockChain<DumbAction> minerChain = _blockchains[0];
             BlockChain<DumbAction> receiverChain = _blockchains[1];
@@ -975,8 +1111,16 @@ namespace Libplanet.Tests.Net
         [Fact(Timeout = Timeout)]
         public async Task Preload()
         {
-            Swarm<DumbAction> minerSwarm = _swarms[0];
-            Swarm<DumbAction> receiverSwarm = _swarms[1];
+            Swarm<DumbAction> minerSwarm = new Swarm<DumbAction>(
+                    _blockchains[0],
+                    new PrivateKey(),
+                    appProtocolVersion: 1,
+                    host: IPAddress.Loopback.ToString());
+            Swarm<DumbAction> receiverSwarm = new Swarm<DumbAction>(
+                    _blockchains[1],
+                    new PrivateKey(),
+                    appProtocolVersion: 1,
+                    host: IPAddress.Loopback.ToString());
 
             BlockChain<DumbAction> minerChain = _blockchains[0];
             BlockChain<DumbAction> receiverChain = _blockchains[1];
