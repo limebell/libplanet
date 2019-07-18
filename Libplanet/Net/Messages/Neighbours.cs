@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Runtime.Serialization.Formatters.Binary;
 using Libplanet.Net.Protocols;
 using NetMQ;
 
@@ -26,7 +25,7 @@ namespace Libplanet.Net.Messages
         {
             int foundCount = body[0].ConvertToInt32();
             Found = body.Skip(1).Take(foundCount)
-                .Select(f => Deserialize(f.ToByteArray()))
+                .Select(f => Peer.Deserialize(f.ToByteArray()))
                 .ToList();
         }
 
@@ -43,28 +42,8 @@ namespace Libplanet.Net.Messages
 
                 foreach (Peer peer in Found)
                 {
-                    yield return new NetMQFrame(Serialize(peer));
+                    yield return new NetMQFrame(peer.Serialize());
                 }
-            }
-        }
-
-        private byte[] Serialize(Peer peer)
-        {
-            var formatter = new BinaryFormatter();
-            using (MemoryStream stream = new MemoryStream())
-            {
-                formatter.Serialize(stream, peer);
-                return stream.ToArray();
-            }
-        }
-
-        private Peer Deserialize(byte[] bytes)
-        {
-            var formatter = new BinaryFormatter();
-            using (MemoryStream stream = new MemoryStream(bytes))
-            {
-                stream.Seek(0, SeekOrigin.Begin);
-                return (Peer)formatter.Deserialize(stream);
             }
         }
     }

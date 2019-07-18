@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Net;
 using Libplanet.Crypto;
 using Libplanet.Net.Protocols;
 using NetMQ;
@@ -83,24 +82,14 @@ namespace Libplanet.Net.Messages
                 throw new ArgumentException("Can't parse empty NetMQMessage.");
             }
 
-            // (reply == true)  [type, pubkey, host, port, sign, frames...]
-            // (reply == false) [identity, type, pubkey, host, port, sign, frames...]
-            int headerCount = reply ? 5 : 6;
-            MessageType rawType = (MessageType)raw[headerCount - 5].ConvertToInt32();
-            PublicKey publicKey = new PublicKey(raw[headerCount - 4].ToByteArray());
-            DnsEndPoint endPoint = new DnsEndPoint(
-                raw[headerCount - 3].ConvertToString(),
-                raw[headerCount - 2].ConvertToInt32());
+            // (reply == true)  [type, peer, sign, frames...]
+            // (reply == false) [identity, type, peer, sign, frames...]
+            int headerCount = reply ? 3 : 4;
+            MessageType rawType = (MessageType)raw[headerCount - 3].ConvertToInt32();
+            byte[] peer = raw[headerCount - 2].ToByteArray();
             byte[] signature = raw[headerCount - 1].ToByteArray();
 
             NetMQFrame[] body = raw.Skip(headerCount).ToArray();
-
-            if (!publicKey.Verify(body.ToByteArray(), signature))
-            {
-                throw new InvalidMessageException(
-                    "the message signature is invalid"
-                );
-            }
 
             Dictionary<MessageType, Type> types = new Dictionary<MessageType, Type>
             {
@@ -125,8 +114,15 @@ namespace Libplanet.Net.Messages
 
             Message message = (Message)Activator.CreateInstance(
                 type, new[] { body });
+            message.Remote = Peer.Deserialize(peer);
 
-            message.Remote = new Peer(publicKey, endPoint);
+            if (!message.Remote.PublicKey.Verify(body.ToByteArray(), signature))
+            {
+                throw new InvalidMessageException(
+                    "the message signature is invalid"
+                );
+            }
+
             if (!reply)
             {
                 message.Identity = raw[0].Buffer.ToArray();
@@ -135,12 +131,12 @@ namespace Libplanet.Net.Messages
             return message;
         }
 
-        public NetMQMessage ToNetMQMessage(PrivateKey key, DnsEndPoint endPoint)
+        public NetMQMessage ToNetMQMessage(PrivateKey key, Peer self)
         {
-            if (endPoint is null)
+            if (self is null)
             {
                 throw new InvalidMessageException(
-                    "Can't make message from unbound Swarm.");
+                    "Sender cannot be null.");
             }
 
             NetMQMessage message = new NetMQMessage();
@@ -153,9 +149,7 @@ namespace Libplanet.Net.Messages
 
             // Write headers. (inverse order)
             message.Push(key.Sign(message.ToByteArray()));
-            message.Push(endPoint.Port);
-            message.Push(endPoint.Host);
-            message.Push(key.PublicKey.Format(true));
+            message.Push(self.Serialize());
             message.Push((byte)Type);
 
             if (Identity is byte[] to)

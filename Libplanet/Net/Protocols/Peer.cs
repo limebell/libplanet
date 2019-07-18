@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics.Contracts;
+using System.IO;
 using System.Net;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Formatters.Binary;
@@ -115,6 +116,16 @@ namespace Libplanet.Net.Protocols
         [Pure]
         internal IPAddress PublicIPAddress { get; }
 
+        public static Peer Deserialize(byte[] bytes)
+        {
+            var formatter = new BinaryFormatter();
+            using (MemoryStream stream = new MemoryStream(bytes))
+            {
+                stream.Seek(0, SeekOrigin.Begin);
+                return (Peer)formatter.Deserialize(stream);
+            }
+        }
+
         /// <inheritdoc/>
         public void GetObjectData(
             SerializationInfo info,
@@ -132,6 +143,16 @@ namespace Libplanet.Net.Protocols
         public override string ToString()
         {
             return $"{Address}.{EndPoint}.{AppProtocolVersion}";
+        }
+
+        public byte[] Serialize()
+        {
+            var formatter = new BinaryFormatter();
+            using (MemoryStream stream = new MemoryStream())
+            {
+                formatter.Serialize(stream, this);
+                return stream.ToArray();
+            }
         }
 
         internal Peer WithAppProtocolVersion(int appProtocolVersion)

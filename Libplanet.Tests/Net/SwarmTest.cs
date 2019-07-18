@@ -636,7 +636,7 @@ namespace Libplanet.Tests.Net
                 {
                     var request = new GetBlocks(hashes, 2);
                     await socket.SendMultipartMessageAsync(
-                        request.ToNetMQMessage(privateKey, swarmB.AsPeer.EndPoint));
+                        request.ToNetMQMessage(privateKey, swarmB.AsPeer));
 
                     NetMQMessage response = await socket.ReceiveMultipartMessageAsync();
                     Message parsedMessage = Message.Parse(response, true);

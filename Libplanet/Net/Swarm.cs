@@ -538,7 +538,7 @@ namespace Libplanet.Net
 
                 // FIXME: Switch this statement to async is probably the best
                 bool sent = dealer.TrySendMultipartMessage(
-                    ReplyTimeout, message.ToNetMQMessage(_privateKey, EndPoint));
+                    ReplyTimeout, message.ToNetMQMessage(_privateKey, AsPeer));
 
                 if (!sent)
                 {
@@ -584,7 +584,7 @@ namespace Libplanet.Net
             var request = new GetBlockHashes(locator, stop);
 
             _logger.Debug($"Send GetBlockHashesAsync to [{peer.Address.ToHex()}]");
-            dealer.SendMultipartMessage(request.ToNetMQMessage(_privateKey, EndPoint));
+            dealer.SendMultipartMessage(request.ToNetMQMessage(_privateKey, AsPeer));
 
             NetMQMessage response = dealer.ReceiveMultipartMessage();
             _logger.Debug("Received BlockHashes");
@@ -617,7 +617,7 @@ namespace Libplanet.Net
                         blockHashes.ToArray();
                     var request = new GetBlocks(blockHashesAsArray);
                     await dealer.SendMultipartMessageAsync(
-                        request.ToNetMQMessage(_privateKey, EndPoint),
+                        request.ToNetMQMessage(_privateKey, AsPeer),
                         cancellationToken: yieldToken);
 
                     int hashCount = blockHashesAsArray.Count();
@@ -672,7 +672,7 @@ namespace Libplanet.Net
 
                 var txIdsAsArray = txIds as TxId[] ?? txIds.ToArray();
                 var request = new GetTxs(txIdsAsArray);
-                dealer.SendMultipartMessage(request.ToNetMQMessage(_privateKey, EndPoint));
+                dealer.SendMultipartMessage(request.ToNetMQMessage(_privateKey, AsPeer));
 
                 int hashCount = txIdsAsArray.Count();
                 _logger.Debug($"Required tx count: {hashCount}.");
@@ -1315,7 +1315,7 @@ namespace Libplanet.Net
         {
             Message msg = e.Queue.Dequeue();
             _logger.Debug($"Reply {msg} to {ByteUtil.Hex(msg.Identity)}...");
-            NetMQMessage netMQMessage = msg.ToNetMQMessage(_privateKey, EndPoint);
+            NetMQMessage netMQMessage = msg.ToNetMQMessage(_privateKey, AsPeer);
             _router.SendMultipartMessage(netMQMessage);
             _logger.Debug($"Replied.");
         }
@@ -1340,7 +1340,7 @@ namespace Libplanet.Net
 
         private async Task CreatePermission(Peer peer)
         {
-            IPAddress[] ips;
+            IPAddress[] ips = null;
             if (peer.PublicIPAddress is null)
             {
                 string peerHost = peer.EndPoint.Host;
@@ -1350,7 +1350,14 @@ namespace Libplanet.Net
                 }
                 else
                 {
-                    ips = await Dns.GetHostAddressesAsync(peerHost);
+                    try
+                    {
+                        ips = Dns.GetHostAddresses(peerHost);
+                    }
+                    catch (Exception e)
+                    {
+                        _logger.Debug($"gethost: {e}");
+                    }
                 }
             }
             else
