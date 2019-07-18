@@ -174,7 +174,7 @@ namespace Libplanet.Tests.Net
                     kp.PingAsync(swarmB.AsPeer),
                     kp.PingAsync(swarmC.AsPeer));
 
-                await Task.Delay(1000);
+                await Task.Delay(1500);
             }
             finally
             {
@@ -220,7 +220,7 @@ namespace Libplanet.Tests.Net
                 Peer peer = swarmC.AsPeer;
                 await kp.PingAsync(swarmB.AsPeer);
                 await kp.PingAsync(peer);
-                await Task.Delay(500);
+                await Task.Delay(1500);
 
                 Assert.Contains(swarmB.AsPeer, swarmA.Peers);
                 Assert.Contains(peer, swarmA.Peers);
@@ -229,7 +229,7 @@ namespace Libplanet.Tests.Net
                 await kp.PingAsync(peer);
                 await Task.Delay(1500);
                 await kp.PingAsync(swarmB.AsPeer);
-                await Task.Delay(500);
+                await Task.Delay(1500);
 
                 Assert.Contains(swarmB.AsPeer, swarmA.Peers);
                 Assert.DoesNotContain(peer, swarmA.Peers);
@@ -348,13 +348,11 @@ namespace Libplanet.Tests.Net
             {
                 await Task.WhenAll(swarms.Take(size).Select(s => StartAsync(s)));
 
-                await Task.WhenAll(swarms.Skip(1).Take(size - 2)
-                    .Select(s => Task.Run(() => s.BootstrapAsync(
-                        new List<Peer> { swarms[0].AsPeer }).Wait())));
-
-                await Task.Delay(1000);
-                await swarms[size - 1].BootstrapAsync(new List<Peer> { swarms[0].AsPeer });
-                await Task.Delay(1000);
+                for (int i = 1; i < size; i++)
+                {
+                    await swarms[i].BootstrapAsync(new List<Peer> { swarms[0].AsPeer });
+                    await Task.Delay(1000);
+                }
             }
             finally
             {
@@ -847,7 +845,7 @@ namespace Libplanet.Tests.Net
                     Log.Debug($"{swarms[i].Trace()}");
                 }
 
-                await Task.Delay(4000);
+                await Task.Delay(10000);
 
                 for (int i = 1; i < size; i++)
                 {
