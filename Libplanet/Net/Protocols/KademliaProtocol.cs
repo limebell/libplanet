@@ -273,7 +273,8 @@ namespace Libplanet.Net.Protocols
             return echoed.ToString() + peer.PublicKey.ToString();
         }
 
-        private void Ping(Peer target, Peer replacement = null)
+#pragma warning disable
+        internal void Ping(Peer target, Peer replacement = null)
         {
             byte[] echoed = SendPing(target);
             string pingid = MakePingId(echoed, _thisPeer);
@@ -281,6 +282,7 @@ namespace Libplanet.Net.Protocols
                 DateTimeOffset.UtcNow + TimeSpan.FromMilliseconds(RequestTimeout);
             _expectedPongs[pingid] = new ExpectedPong(timeout, target, replacement);
         }
+#pragma warning restore
 
         private void DoFindPeer(Address target, Peer viaPeer = null)
         {
