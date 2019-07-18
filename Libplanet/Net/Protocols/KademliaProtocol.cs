@@ -241,7 +241,7 @@ namespace Libplanet.Net.Protocols
                     break;
 
                 case Pong pong:
-                    ReceivePongAsync(pong.Remote, pong.AppProtocolVersion, pong.Echoed);
+                    ReceivePongAsync(pong.Remote, pong.Echoed);
                     break;
 
                 case FindPeer findPeer:
@@ -376,7 +376,7 @@ namespace Libplanet.Net.Protocols
         }
 
         // receive pong
-        private async Task ReceivePongAsync(Peer remote, int appProtocolVersion, byte[] echoed)
+        private async Task ReceivePongAsync(Peer remote, byte[] echoed)
         {
             if (remote == _thisPeer)
             {
@@ -384,13 +384,11 @@ namespace Libplanet.Net.Protocols
                     "Cannot receive pong from self");
             }
 
-            Peer peer = new Peer(remote.PublicKey, remote.EndPoint, appProtocolVersion);
-
-            Log.Debug($"Pong's echo: {ByteUtil.Hex(echoed)}, from [{peer.Address.ToHex()}]");
-            string pingid = MakePingId(echoed, peer);
+            Log.Debug($"Pong's echo: {ByteUtil.Hex(echoed)}, from [{remote.Address.ToHex()}]");
+            string pingid = MakePingId(echoed, remote);
 
             // update process required
-            await UpdateAsync(peer, pingid);
+            await UpdateAsync(remote, pingid);
         }
 
         private async Task ReceiveNeighboursAsync(Peer remote, List<Peer> found)
