@@ -63,7 +63,9 @@ namespace Libplanet.Net
 
         private readonly ILogger _logger;
 
-        private IProtocol _protocol;
+#pragma warning disable
+        internal IProtocol _protocol;
+#pragma warning restore
 
         private TaskCompletionSource<object> _runningEvent;
         private int? _listenPort;
