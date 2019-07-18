@@ -202,33 +202,45 @@ namespace Libplanet.Tests.Net
                     new PrivateKey(),
                     appProtocolVersion: 1,
                     host: IPAddress.Loopback.ToString());
+            Swarm<DumbAction> swarmC = new Swarm<DumbAction>(
+                    _blockchains[2],
+                    new PrivateKey(),
+                    appProtocolVersion: 1,
+                    host: IPAddress.Loopback.ToString());
 
             try
             {
                 await StartAsync(swarmA);
                 await StartAsync(swarmB);
+                await StartAsync(swarmC);
 
                 KademliaProtocol<DumbAction> kp =
                     (KademliaProtocol<DumbAction>)swarmA._protocol;
 
-                Peer peer = swarmB.AsPeer;
+                Peer peer = swarmC.AsPeer;
+                await kp.PingAsync(swarmB.AsPeer);
                 await kp.PingAsync(peer);
-                await Task.Delay(300);
+                await Task.Delay(500);
 
+                Assert.Contains(swarmB.AsPeer, swarmA.Peers);
                 Assert.Contains(peer, swarmA.Peers);
 
-                await swarmB.StopAsync();
+                await swarmC.StopAsync();
                 await kp.PingAsync(peer);
                 await Task.Delay(1500);
+                await kp.PingAsync(swarmB.AsPeer);
+                await Task.Delay(500);
 
+                Assert.Contains(swarmB.AsPeer, swarmA.Peers);
                 Assert.DoesNotContain(peer, swarmA.Peers);
             }
             finally
             {
                 await swarmA.StopAsync();
-                if (swarmB.Running)
+                await swarmB.StopAsync();
+                if (swarmC.Running)
                 {
-                    await swarmB.StopAsync();
+                    await swarmC.StopAsync();
                 }
             }
         }
