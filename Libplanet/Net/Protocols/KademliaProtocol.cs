@@ -157,6 +157,7 @@ namespace Libplanet.Net.Protocols
                     _deletedPingids.Add(entry.Key);
                     _expectedPongs.TryRemove(entry.Key, out ExpectedPong ep);
                     await _routing.RemovePeerAsync(ep.Target);
+                    Log.Debug($"Removed peer {ep.Target.Address.ToHex()}");
                     if (ep.Replacement != null)
                     {
 #pragma warning disable CS4014 // 이 호출을 대기하지 않으므로 호출이 완료되기 전에 현재 메서드가 계속 실행됩니다.
@@ -235,7 +236,7 @@ namespace Libplanet.Net.Protocols
             switch (message)
             {
                 case Ping ping:
-                    ReceivePingAsync(ping.Remote, ping.Echo, ping.Identity).Wait();
+                    ReceivePingAsync(ping.Remote, ping.Echo).Wait();
                     break;
 
                 case Pong pong:
@@ -245,8 +246,7 @@ namespace Libplanet.Net.Protocols
                 case FindPeer findPeer:
                     ReceiveFindPeerAsync(
                         findPeer.Remote,
-                        findPeer.Target,
-                        findPeer.Identity).Wait();
+                        findPeer.Target).Wait();
                     break;
 
                 case Neighbours neighbours:
@@ -342,24 +342,18 @@ namespace Libplanet.Net.Protocols
         }
 
         private void SendPong(
-            byte[] echoed,
-            byte[] identity)
+            Peer addressee,
+            byte[] echoed)
         {
-            Pong pong = new Pong(_appProtocolVersion, echoed)
-            {
-                Identity = identity,
-            };
-            _swarm.ReplyMessage(pong);
+            Pong pong = new Pong(_appProtocolVersion, echoed);
+            _swarm.SendMessageAsync(addressee, pong, false).Wait();
         }
 
-        private void SendNeighbours(List<Peer> found, byte[] identity)
+        private void SendNeighbours(Peer addressee, List<Peer> found)
         {
             // implemented as reply of FindPeer
-            Neighbours neighbours = new Neighbours(found)
-            {
-                Identity = identity,
-            };
-            _swarm.ReplyMessage(neighbours);
+            Neighbours neighbours = new Neighbours(found);
+            _swarm.SendMessageAsync(addressee, neighbours, false).Wait();
         }
 
         private async Task SendFindPeerAsync(Peer addressee, Address target)
@@ -369,7 +363,7 @@ namespace Libplanet.Net.Protocols
         }
 
         // send pong back to remote
-        private async Task ReceivePingAsync(Peer remote, byte[] echo, byte[] identity)
+        private async Task ReceivePingAsync(Peer remote, byte[] echo)
         {
             if (remote == _thisPeer)
             {
@@ -378,7 +372,7 @@ namespace Libplanet.Net.Protocols
             }
 
             await UpdateAsync(remote);
-            SendPong(echo, identity);
+            SendPong(remote, echo);
         }
 
         // receive pong
@@ -465,11 +459,11 @@ namespace Libplanet.Net.Protocols
 
         // FIXME: this method is not safe from amplification attack
         // maybe ping/pong/ping/pong is required
-        private async Task ReceiveFindPeerAsync(Peer remote, Address target, byte[] identity)
+        private async Task ReceiveFindPeerAsync(Peer remote, Address target)
         {
             await UpdateAsync(remote);
             List<Peer> found = _routing.Neighbours(target, BucketSize).ToList();
-            SendNeighbours(found, identity);
+            SendNeighbours(remote, found);
         }
 
         // expected pong data type.
