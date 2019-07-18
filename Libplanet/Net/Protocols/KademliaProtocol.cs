@@ -231,35 +231,35 @@ namespace Libplanet.Net.Protocols
 #pragma warning restore CS4014 // 이 호출을 대기하지 않으므로 호출이 완료되기 전에 현재 메서드가 계속 실행됩니다.
         }
 
+#pragma warning disable CS4014 // 이 호출을 대기하지 않으므로 호출이 완료되기 전에 현재 메서드가 계속 실행됩니다.
         public void ReceiveMessage(object sender, Message message)
         {
             switch (message)
             {
                 case Ping ping:
-                    ReceivePingAsync(ping.Remote, ping.Echo).Wait();
+                    ReceivePingAsync(ping.Remote, ping.Echo);
                     break;
 
                 case Pong pong:
-                    ReceivePongAsync(pong.Remote, pong.AppProtocolVersion, pong.Echoed).Wait();
+                    ReceivePongAsync(pong.Remote, pong.AppProtocolVersion, pong.Echoed);
                     break;
 
                 case FindPeer findPeer:
                     ReceiveFindPeerAsync(
                         findPeer.Remote,
-                        findPeer.Target).Wait();
+                        findPeer.Target);
                     break;
 
                 case Neighbours neighbours:
-                    ReceiveNeighboursAsync(neighbours.Remote, neighbours.Found).Wait();
+                    ReceiveNeighboursAsync(neighbours.Remote, neighbours.Found);
                     break;
 
                 default:
-#pragma warning disable CS4014 // 이 호출을 대기하지 않으므로 호출이 완료되기 전에 현재 메서드가 계속 실행됩니다.
                     UpdateAsync(message.Remote);
-#pragma warning restore CS4014 // 이 호출을 대기하지 않으므로 호출이 완료되기 전에 현재 메서드가 계속 실행됩니다.
                     break;
             }
         }
+#pragma warning restore CS4014 // 이 호출을 대기하지 않으므로 호출이 완료되기 전에 현재 메서드가 계속 실행됩니다.
 
         public string Trace()
         {
