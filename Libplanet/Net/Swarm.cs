@@ -50,7 +50,7 @@ namespace Libplanet.Net
         private readonly BlockChain<T> _blockChain;
         private readonly PrivateKey _privateKey;
         private readonly RouterSocket _router;
-        private readonly IDictionary<Address, DealerSocket> _dealers;
+        private readonly ConcurrentQueue<DealerSocket> _dealers;
         private readonly int _appProtocolVersion;
 
         private readonly TimeSpan _dialTimeout;
@@ -141,7 +141,7 @@ namespace Libplanet.Net
             BlockReceived = new AsyncAutoResetEvent();
             DifferentVersionPeerEncountered = differentVersionPeerEncountered;
 
-            _dealers = new ConcurrentDictionary<Address, DealerSocket>();
+            _dealers = new ConcurrentQueue<DealerSocket>();
             _router = new RouterSocket();
             _router.Options.RouterHandover = true;
             _replyQueue = new NetMQQueue<Message>();
@@ -290,12 +290,11 @@ namespace Libplanet.Net
                     _replyQueue.Dispose();
                     _router.Dispose();
 
-                    foreach (DealerSocket dealer in _dealers.Values)
+                    while (!_dealers.IsEmpty)
                     {
+                        _dealers.TryDequeue(out DealerSocket dealer);
                         dealer.Dispose();
                     }
-
-                    _dealers.Clear();
 
                     Running = false;
                 }
@@ -509,12 +508,13 @@ namespace Libplanet.Net
                 await CreatePermission(peer);
             }
 
-            if (_dealers.TryGetValue(peer.Address, out DealerSocket dealer))
+            while (_dealers.Count > MaxDealerCount)
             {
-                dealer.Dispose();
+                _dealers.TryDequeue(out DealerSocket rdealer);
+                rdealer.Dispose();
             }
 
-            dealer = new DealerSocket();
+            DealerSocket dealer = new DealerSocket();
             dealer.Options.Identity = Address.ToByteArray();
 
             return dealer;
@@ -548,6 +548,7 @@ namespace Libplanet.Net
                 }
 
                 _logger.Debug($"[{message}] sent to [{peer.Address.ToHex()}({address})]");
+                _dealers.Enqueue(dealer);
             }
             catch (TimeoutException)
             {
@@ -564,10 +565,6 @@ namespace Libplanet.Net
                 dealer.Dispose();
                 _logger.Debug($"Unexpected exception. [{e.ToString()}]");
                 throw;
-            }
-            finally
-            {
-                _dealers[peer.Address] = dealer;
             }
         }
 
