@@ -518,7 +518,7 @@ namespace Libplanet.Net
             return dealer;
         }
 
-        internal async Task SendMessageAsync(Peer peer, Message message, bool needReply)
+        internal async Task SendMessageAsync(Peer peer, Message message)
         {
             if (peer is null)
             {
@@ -1292,7 +1292,7 @@ namespace Libplanet.Net
                 _logger.Debug($"Broadcasting message [{msg}]");
                 Task.WhenAll(
                     _protocol.PeersToBroadcast.Select(s =>
-                        Task.Run(() => SendMessageAsync(s, msg, false))
+                        Task.Run(() => SendMessageAsync(s, msg))
                     )
                 ).Wait();
             }

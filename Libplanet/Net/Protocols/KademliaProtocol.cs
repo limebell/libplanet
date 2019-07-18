@@ -337,29 +337,29 @@ namespace Libplanet.Net.Protocols
                     _thisPeer.ToString() +
                     DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()));
             Ping ping = new Ping(echo);
-            await _swarm.SendMessageAsync(addressee, ping, true);
+            await _swarm.SendMessageAsync(addressee, ping);
             return echo;
         }
 
-        private void SendPong(
+        private async Task SendPongAsync(
             Peer addressee,
             byte[] echoed)
         {
             Pong pong = new Pong(_appProtocolVersion, echoed);
-            _swarm.SendMessageAsync(addressee, pong, false).Wait();
+            await _swarm.SendMessageAsync(addressee, pong);
         }
 
-        private void SendNeighbours(Peer addressee, List<Peer> found)
+        private async Task SendNeighboursAsync(Peer addressee, List<Peer> found)
         {
             // implemented as reply of FindPeer
             Neighbours neighbours = new Neighbours(found);
-            _swarm.SendMessageAsync(addressee, neighbours, false).Wait();
+            await _swarm.SendMessageAsync(addressee, neighbours);
         }
 
         private async Task SendFindPeerAsync(Peer addressee, Address target)
         {
             FindPeer findPeer = new FindPeer(target);
-            await _swarm.SendMessageAsync(addressee, findPeer, true);
+            await _swarm.SendMessageAsync(addressee, findPeer);
         }
 
         // send pong back to remote
@@ -372,7 +372,7 @@ namespace Libplanet.Net.Protocols
             }
 
             await UpdateAsync(remote);
-            SendPong(remote, echo);
+            await SendPongAsync(remote, echo);
         }
 
         // receive pong
@@ -463,7 +463,7 @@ namespace Libplanet.Net.Protocols
         {
             await UpdateAsync(remote);
             List<Peer> found = _routing.Neighbours(target, BucketSize).ToList();
-            SendNeighbours(remote, found);
+            await SendNeighboursAsync(remote, found);
         }
 
         // expected pong data type.
