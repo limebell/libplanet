@@ -43,9 +43,7 @@ namespace Libplanet.Net
         private static readonly TimeSpan ReplyTimeout =
             TimeSpan.FromMilliseconds(1000);
 
-#pragma warning disable CS0414
         private static readonly int MaxDealerCount = 10;
-#pragma warning restore CS16333
 
         private readonly BlockChain<T> _blockChain;
         private readonly PrivateKey _privateKey;

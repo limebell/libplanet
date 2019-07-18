@@ -35,6 +35,11 @@ namespace Libplanet.Tests.Net
 
         private readonly BlockChain<DumbAction>[] _blockchains;
 
+        static SwarmTest()
+        {
+            NetMQConfig.MaxSockets = 1048576;
+        }
+
         public SwarmTest(ITestOutputHelper output)
         {
             const string outputTemplate =
