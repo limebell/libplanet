@@ -147,7 +147,6 @@ namespace Libplanet.Net
             _replyQueue = new NetMQQueue<Message>();
             _broadcastQueue = new NetMQQueue<Message>();
             _poller = new NetMQPoller { _router, _replyQueue, _broadcastQueue };
-            /*_replyPoller = new NetMQPoller();*/
 
             _blockSyncMutex = new AsyncLock();
             _runningMutex = new AsyncLock();
@@ -281,11 +280,6 @@ namespace Libplanet.Net
                         _poller.Dispose();
                     }
 
-                    /*if (_replyPoller.IsRunning)
-                    {
-                        _replyPoller.Dispose();
-                    }*/
-
                     if (_protocol != null)
                     {
                         MessageReceived -= _protocol.ReceiveMessage;
@@ -400,8 +394,6 @@ namespace Libplanet.Net
                     BroadcastTxAsync(broadcastTxInterval, _cancellationToken),
                     Task.Run(() => _poller.Run(), _cancellationToken),
                 };
-
-                /*tasks.Add(RefreshTimeout(_cancellationToken));*/
 
                 if (behindNAT)
                 {
