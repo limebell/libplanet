@@ -327,9 +327,12 @@ namespace Libplanet.Tests.Net
             Log.Debug($"Swarm B has peer: {swarmB.Peers.Count}");
             Log.Debug($"Swarm C has peer: {swarmC.Peers.Count}");
 
-            Assert.Equal(2, swarmA.Peers.Count);
-            Assert.Equal(2, swarmB.Peers.Count);
-            Assert.Equal(2, swarmC.Peers.Count);
+            Assert.True(swarmA.Peers.Contains(swarmB.AsPeer), "case1");
+            Assert.True(swarmA.Peers.Contains(swarmC.AsPeer), "case2");
+            Assert.True(swarmB.Peers.Contains(swarmA.AsPeer), "case3");
+            Assert.True(swarmB.Peers.Contains(swarmC.AsPeer), "case4");
+            Assert.True(swarmC.Peers.Contains(swarmA.AsPeer), "case5");
+            Assert.True(swarmC.Peers.Contains(swarmB.AsPeer), "case6");
         }
 
         [Fact(Timeout = 2 * Timeout)]
@@ -1068,15 +1071,17 @@ namespace Libplanet.Tests.Net
                 await swarmA.BootstrapAsync(new[] { seed.AsPeer });
                 await swarmB.BootstrapAsync(new[] { seed.AsPeer });
 
-                Assert.Contains(swarmA.AsPeer, swarmB.Peers);
-                Assert.Contains(swarmB.AsPeer, swarmA.Peers);
+                await Task.Delay(2000);
+
+                Assert.True(seed.Peers.Contains(swarmA.AsPeer), "case1");
+                Assert.True(seed.Peers.Contains(swarmB.AsPeer), "case2");
+                Assert.True(swarmA.Peers.Contains(seed.AsPeer), "case3");
+                Assert.True(swarmA.Peers.Contains(swarmB.AsPeer), "case4");
+                Assert.True(swarmB.Peers.Contains(seed.AsPeer), "case5");
+                Assert.True(swarmB.Peers.Contains(swarmA.AsPeer), "case6");
             }
             finally
             {
-                await Task.WhenAll(
-                    seed.StopAsync(),
-                    swarmA.StopAsync(),
-                    swarmB.StopAsync());
             }
         }
 
