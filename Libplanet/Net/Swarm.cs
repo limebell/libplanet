@@ -541,13 +541,14 @@ namespace Libplanet.Net
                     $"to [{peer.Address.ToHex()}({address})]...");
 
                 // FIXME: Switch this statement to async is probably the best
-                bool sent = dealer.TrySendMultipartMessage(
+                dealer.SendMultipartMessage(message.ToNetMQMessage(_privateKey, AsPeer));
+                /*bool sent = dealer.TrySendMultipartMessage(
                     ReplyTimeout, message.ToNetMQMessage(_privateKey, AsPeer));
 
                 if (!sent)
                 {
                     throw new TimeoutException();
-                }
+                }*/
 
                 _logger.Debug($"[{message}] sent to [{peer.Address.ToHex()}({address})]");
                 _dealers.Enqueue(dealer);
