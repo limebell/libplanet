@@ -43,7 +43,7 @@ namespace Libplanet.Net
         private static readonly TimeSpan ReplyTimeout =
             TimeSpan.FromMilliseconds(1000);
 
-        private static readonly int MaxDealerCount = 10;
+        private static readonly int MaxDealerCount = 10000;
 
         private readonly BlockChain<T> _blockChain;
         private readonly PrivateKey _privateKey;
@@ -565,7 +565,7 @@ namespace Libplanet.Net
             catch (Exception e)
             {
                 dealer.Dispose();
-                _logger.Debug($"Unexpected exception. [{e.ToString()}]");
+                _logger.Debug($"Unexpected exception during SendMessageAsync(). [{e.ToString()}]");
                 throw;
             }
         }
