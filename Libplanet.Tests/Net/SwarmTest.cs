@@ -842,9 +842,11 @@ namespace Libplanet.Tests.Net
             try
             {
                 await Task.WhenAll(swarms.Take(size).Select(s => StartAsync(s)));
-                await Task.WhenAll(swarms.Skip(1).Take(size - 1)
-                    .Select(s => Task.Run(() => s.BootstrapAsync(
-                        new List<Peer> { swarms[0].AsPeer }).Wait())));
+
+                for (int i = 1; i < size; i++)
+                {
+                    await swarms[i].BootstrapAsync(new List<Peer> { swarms[0].AsPeer });
+                }
 
                 await Task.Delay(1000);
 
@@ -922,8 +924,6 @@ namespace Libplanet.Tests.Net
 
                 swarmB.BroadcastBlocks(new[] { chainB.Last() });
 
-                /*await swarmC.BlockReceived.WaitAsync();
-                await swarmA.BlockReceived.WaitAsync();*/
                 await Task.Delay(10000);
 
                 // chainC may or may not be changed, because swarmC may not
@@ -935,8 +935,6 @@ namespace Libplanet.Tests.Net
 
                 swarmA.BroadcastBlocks(new[] { chainA.Last() });
 
-                /*await swarmB.BlockReceived.WaitAsync();
-                await swarmC.BlockReceived.WaitAsync();*/
                 await Task.Delay(10000);
 
                 Assert.Equal(chainA.AsEnumerable(), chainB);
