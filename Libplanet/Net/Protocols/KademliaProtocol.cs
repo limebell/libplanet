@@ -18,7 +18,7 @@ namespace Libplanet.Net.Protocols
     {
         private const int BucketSize = 16;
         private const int TableSize = Address.Size * sizeof(byte) * 8;
-        private const double RequestTimeout = 3 * 300;
+        private const double RequestTimeout = 6 * 300;
         private const int IdleBucketRefreshInterval = 3600;
         private const int FindConcurrency = 3;
 

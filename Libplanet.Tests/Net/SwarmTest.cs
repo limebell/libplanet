@@ -225,16 +225,16 @@ namespace Libplanet.Tests.Net
                 Peer peer = swarmC.AsPeer;
                 await kp.PingAsync(swarmB.AsPeer);
                 await kp.PingAsync(peer);
-                await Task.Delay(1500);
+                await Task.Delay(3000);
 
                 Assert.Contains(swarmB.AsPeer, swarmA.Peers);
                 Assert.Contains(peer, swarmA.Peers);
 
                 await swarmC.StopAsync();
                 await kp.PingAsync(peer);
-                await Task.Delay(1500);
+                await Task.Delay(3000);
                 await kp.PingAsync(swarmB.AsPeer);
-                await Task.Delay(1500);
+                await Task.Delay(3000);
 
                 Assert.Contains(swarmB.AsPeer, swarmA.Peers);
                 Assert.DoesNotContain(peer, swarmA.Peers);
