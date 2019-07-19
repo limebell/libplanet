@@ -513,6 +513,7 @@ namespace Libplanet.Net
             while (_dealers.Count > MaxDealerCount)
             {
                 _dealers.TryDequeue(out DealerSocket rdealer);
+                _logger.Debug($"DealerSocket closed [{rdealer}]");
                 rdealer.Dispose();
             }
 
