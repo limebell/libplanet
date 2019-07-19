@@ -558,13 +558,17 @@ namespace Libplanet.Net
                     }
                 }*/
 
-                bool sent = dealer.TrySendMultipartMessage(
+                await dealer.SendMultipartMessageAsync(
+                    message.ToNetMQMessage(_privateKey, AsPeer),
+                    cancellationToken: _cancellationToken);
+
+                /*bool sent = dealer.TrySendMultipartMessage(
                     ReplyTimeout, message.ToNetMQMessage(_privateKey, AsPeer));
 
                 if (!sent)
                 {
                     throw new TimeoutException();
-                }
+                }*/
 
                 _logger.Debug($"[{message}] sent to [{peer.Address.ToHex()}({address})]");
                 _dealers.Enqueue(dealer);
