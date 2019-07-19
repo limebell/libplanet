@@ -559,11 +559,13 @@ namespace Libplanet.Net
             catch (TimeoutException)
             {
                 dealer.Dispose();
+                _logger.Debug("Timeout due to TimeoutException.");
                 MessageTimeouted?.Invoke(this, peer);
             }
             catch (SocketException)
             {
                 dealer.Dispose();
+                _logger.Debug("Timeout due to SocketException.");
                 MessageTimeouted?.Invoke(this, peer);
             }
             catch (IOException)
