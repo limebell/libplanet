@@ -556,7 +556,7 @@ namespace Libplanet.Net
             catch (TimeoutException)
             {
                 dealer.Dispose();
-                MessageTimeouted.Invoke(this, peer);
+                MessageTimeouted?.Invoke(this, peer);
             }
             catch (IOException)
             {
@@ -1274,7 +1274,7 @@ namespace Libplanet.Net
 #pragma warning disable CS4014 // 이 호출을 대기하지 않으므로 호출이 완료되기 전에 현재 메서드가 계속 실행됩니다.
                 ProcessMessageAsync(message);
 #pragma warning restore CS4014 // 이 호출을 대기하지 않으므로 호출이 완료되기 전에 현재 메서드가 계속 실행됩니다.
-                MessageReceived.Invoke(this, message);
+                MessageReceived?.Invoke(this, message);
             }
             catch (InvalidMessageException ex)
             {
