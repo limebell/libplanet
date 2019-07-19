@@ -1082,6 +1082,10 @@ namespace Libplanet.Tests.Net
             }
             finally
             {
+                await Task.WhenAll(
+                    seed.StopAsync(),
+                    swarmA.StopAsync(),
+                    swarmB.StopAsync());
             }
         }
 
