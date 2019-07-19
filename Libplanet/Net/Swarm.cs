@@ -273,15 +273,15 @@ namespace Libplanet.Net
                     _replyQueue.ReceiveReady -= DoReply;
                     _router.ReceiveReady -= ReceiveMessage;
 
-                    if (_poller.IsRunning)
-                    {
-                        _poller.Dispose();
-                    }
-
                     if (_protocol != null)
                     {
                         MessageReceived -= _protocol.ReceiveMessage;
                         MessageTimeouted -= _protocol.Timeout;
+                    }
+
+                    if (_poller.IsRunning)
+                    {
+                        _poller.Dispose();
                     }
 
                     _broadcastQueue.Dispose();
