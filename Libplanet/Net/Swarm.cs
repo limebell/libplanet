@@ -542,7 +542,7 @@ namespace Libplanet.Net
 
                 // FIXME: Switch this statement to async is probably the best
                 // dealer.SendMultipartMessage(message.ToNetMQMessage(_privateKey, AsPeer));
-                TimeSpan delayNotNull = TimeSpan.FromMilliseconds(10);
+                /*TimeSpan delayNotNull = TimeSpan.FromMilliseconds(10);
                 TimeSpan elapsed = TimeSpan.Zero;
                 while (!dealer.TrySendMultipartMessage(message.ToNetMQMessage(_privateKey, AsPeer)))
                 {
@@ -556,15 +556,15 @@ namespace Libplanet.Net
                             $"{ReplyTimeout}."
                         );
                     }
-                }
+                }*/
 
-                /*bool sent = dealer.TrySendMultipartMessage(
+                bool sent = dealer.TrySendMultipartMessage(
                     ReplyTimeout, message.ToNetMQMessage(_privateKey, AsPeer));
 
                 if (!sent)
                 {
                     throw new TimeoutException();
-                }*/
+                }
 
                 _logger.Debug($"[{message}] sent to [{peer.Address.ToHex()}({address})]");
                 _dealers.Enqueue(dealer);
