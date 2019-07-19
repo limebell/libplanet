@@ -382,7 +382,11 @@ namespace Libplanet.Net
                     // await PreloadAsync(cancellationToken: _cancellationToken);
                 }
 
-                _protocol = new KademliaProtocol<T>(this, _appProtocolVersion, _cancellationToken);
+                _protocol = new KademliaProtocol<T>(
+                    this,
+                    _appProtocolVersion,
+                    _cancellationToken,
+                    _logger);
                 MessageReceived += _protocol.ReceiveMessage;
                 MessageTimeouted += _protocol.Timeout;
 
@@ -842,7 +846,7 @@ namespace Libplanet.Net
 
         private async Task ProcessMessageAsync(Message message)
         {
-            _logger.Debug($"Message received [{message}]");
+            _logger.Debug($"Message received [{message}] from [{message.Remote.Address.ToHex()}]");
             switch (message)
             {
                 case Pong pong:

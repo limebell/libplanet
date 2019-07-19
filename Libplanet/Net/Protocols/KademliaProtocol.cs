@@ -32,14 +32,19 @@ namespace Libplanet.Net.Protocols
         private readonly ConcurrentDictionary<Address, FindRequest> _findRequests;
         private readonly CancellationToken _cancellationToken;
 
+        private readonly ILogger _logger;
+
         public KademliaProtocol(
             Swarm<T> swarm,
             int appProtocolVersion,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            ILogger logger)
         {
             _swarm = swarm;
             _appProtocolVersion = appProtocolVersion;
             _cancellationToken = cancellationToken;
+            _logger = logger;
+
             _thisPeer = _swarm.AsPeer;
             _random = new System.Random();
             _routing = new RoutingTable(
@@ -126,10 +131,11 @@ namespace Libplanet.Net.Protocols
 
             if (pingid != null && !_expectedPongs.ContainsKey(pingid))
             {
+                _logger.Debug("Unexpected pong.");
                 if (_deletedPingids.Contains(pingid))
                 {
                     // pong received after timeout
-                    Log.Debug("after timeout");
+                    _logger.Debug("After timeout.");
                 }
                 else
                 {
@@ -138,13 +144,12 @@ namespace Libplanet.Net.Protocols
                         if (ep.Target.PublicKey.Equals(peer.PublicKey))
                         {
                             // public key mismatch
-                            Log.Debug("pk mismatch");
+                            _logger.Debug("Public key mismatch.");
                             break;
                         }
                     }
                 }
 
-                Log.Debug("unexpected?");
                 return;
             }
 
@@ -157,7 +162,7 @@ namespace Libplanet.Net.Protocols
                     _deletedPingids.Add(entry.Key);
                     _expectedPongs.TryRemove(entry.Key, out ExpectedPong ep);
                     await _routing.RemovePeerAsync(ep.Target);
-                    Log.Debug($"Removed peer {ep.Target.Address.ToHex()}");
+                    _logger.Debug($"Removed peer [{ep.Target.Address.ToHex()}] from table.");
                     if (ep.Replacement != null)
                     {
 #pragma warning disable CS4014 // 이 호출을 대기하지 않으므로 호출이 완료되기 전에 현재 메서드가 계속 실행됩니다.
@@ -195,14 +200,13 @@ namespace Libplanet.Net.Protocols
                     // added successfully since there was empty space in the bucket
                     if (!contains)
                     {
-                        Log.Debug($"Added [{peer.Address.ToHex()}] to " +
-                            $"[{_thisPeer.Address.ToHex()}]");
+                        _logger.Debug($"Added [{peer.Address.ToHex()}] to table");
                     }
                 }
                 else
                 {
                     await PingAsync(evictionCandidate, peer);
-                    Log.Debug($"Evict peer [{evictionCandidate}]?");
+                    _logger.Debug($"Try evict peer [{evictionCandidate}]");
                 }
             }
 
@@ -296,7 +300,7 @@ namespace Libplanet.Net.Protocols
             }
 
             byte[] echoed = await SendPingAsync(target);
-            Log.Debug($"Ping's echo: {ByteUtil.Hex(echoed)}, to [{target.Address.ToHex()}]");
+            _logger.Debug($"Ping's echo: ({ByteUtil.Hex(echoed)})");
             string pingid = MakePingId(echoed, target);
             DateTimeOffset timeout =
                 DateTimeOffset.UtcNow + TimeSpan.FromMilliseconds(RequestTimeout);
@@ -384,7 +388,7 @@ namespace Libplanet.Net.Protocols
                     "Cannot receive pong from self");
             }
 
-            Log.Debug($"Pong's echo: {ByteUtil.Hex(echoed)}, from [{remote.Address.ToHex()}]");
+            _logger.Debug($"Pong's echo: ({ByteUtil.Hex(echoed)})");
             string pingid = MakePingId(echoed, remote);
 
             // update process required
@@ -412,8 +416,7 @@ namespace Libplanet.Net.Protocols
             {
                 if (DateTimeOffset.UtcNow > entry.Value.Timeout)
                 {
-                    Log.Debug($"Neighbours from [{remote.Address.ToHex()}] " +
-                        $"TimeOut at [{_thisPeer.Address.ToHex()}]");
+                    _logger.Debug($"Neighbours from [{remote.Address.ToHex()}] timeouted.");
                     continue;
                 }
 
