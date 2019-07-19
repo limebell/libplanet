@@ -541,23 +541,6 @@ namespace Libplanet.Net
                     $"to [{peer.Address.ToHex()}({address})]...");
 
                 // FIXME: Switch this statement to async is probably the best
-                // dealer.SendMultipartMessage(message.ToNetMQMessage(_privateKey, AsPeer));
-                /*TimeSpan delayNotNull = TimeSpan.FromMilliseconds(10);
-                TimeSpan elapsed = TimeSpan.Zero;
-                while (!dealer.TrySendMultipartMessage(message.ToNetMQMessage(_privateKey, AsPeer)))
-                {
-                    Thread.Sleep(delayNotNull);
-
-                    elapsed += delayNotNull;
-                    if (elapsed > ReplyTimeout)
-                    {
-                        throw new TimeoutException(
-                            "The operation exceeded the specified time: " +
-                            $"{ReplyTimeout}."
-                        );
-                    }
-                }*/
-
                 await dealer.SendMultipartMessageAsync(
                     message.ToNetMQMessage(_privateKey, AsPeer),
                     cancellationToken: _cancellationToken);
@@ -574,6 +557,11 @@ namespace Libplanet.Net
                 _dealers.Enqueue(dealer);
             }
             catch (TimeoutException)
+            {
+                dealer.Dispose();
+                MessageTimeouted?.Invoke(this, peer);
+            }
+            catch (SocketException)
             {
                 dealer.Dispose();
                 MessageTimeouted?.Invoke(this, peer);
