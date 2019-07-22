@@ -500,7 +500,14 @@ namespace Libplanet.Net
 
         internal void BroadcastMessage(Message message)
         {
-            _broadcastQueue.Enqueue(message);
+            if (Running)
+            {
+                _broadcastQueue.Enqueue(message);
+            }
+            else
+            {
+                throw new SwarmException("Swarm stopped... cannot broadcast message.");
+            }
         }
 
         internal async Task<DealerSocket> GetDealerSocket(Peer peer)
@@ -1187,12 +1194,6 @@ namespace Libplanet.Net
             }
 
             Peer peer = message.Remote;
-            if (peer == null)
-            {
-                _logger.Information(
-                    "TxIds was sent from unknown peer. ignored.");
-                return;
-            }
 
             IAsyncEnumerable<Transaction<T>> fetched = GetTxsAsync(
                 peer, unknownTxIds, _cancellationToken);
