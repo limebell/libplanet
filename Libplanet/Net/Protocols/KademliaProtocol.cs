@@ -299,12 +299,24 @@ namespace Libplanet.Net.Protocols
                 throw new ArgumentNullException(nameof(target));
             }
 
-            byte[] echoed = await SendPingAsync(target);
-            _logger.Debug($"Ping's echo: ({ByteUtil.Hex(echoed)})");
-            string pingid = MakePingId(echoed, target);
+            byte[] echo = new SHA256CryptoServiceProvider()
+                .ComputeHash(Encoding.ASCII.GetBytes(
+                    _thisPeer.ToString() +
+                    DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()));
+            string pingid = MakePingId(echo, target);
+            _expectedPongs[pingid] = new ExpectedPong(null, target, replacement, bootstrap);
+            await SendPingAsync(target, echo);
+            _logger.Debug($"Ping's echo: ({ByteUtil.Hex(echo)})");
             DateTimeOffset timeout =
                 DateTimeOffset.UtcNow + TimeSpan.FromMilliseconds(RequestTimeout);
-            _expectedPongs[pingid] = new ExpectedPong(timeout, target, replacement, bootstrap);
+            if (_expectedPongs.ContainsKey(pingid))
+            {
+                _expectedPongs[pingid] = new ExpectedPong(timeout, target, replacement, bootstrap);
+            }
+            else
+            {
+                _logger.Debug($"Pong of echo ({echo}) is received before setting the timeout.");
+            }
         }
 #pragma warning restore
 
@@ -334,15 +346,10 @@ namespace Libplanet.Net.Protocols
             await Task.WhenAll(tasks);
         }
 
-        private async Task<byte[]> SendPingAsync(Peer addressee)
+        private async Task SendPingAsync(Peer addressee, byte[] echo)
         {
-            byte[] echo = new SHA256CryptoServiceProvider()
-                .ComputeHash(Encoding.ASCII.GetBytes(
-                    _thisPeer.ToString() +
-                    DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()));
             Ping ping = new Ping(echo);
             await _swarm.SendMessageAsync(addressee, ping);
-            return echo;
         }
 
         private async Task SendPongAsync(
@@ -474,7 +481,7 @@ namespace Libplanet.Net.Protocols
         private struct ExpectedPong
         {
             public ExpectedPong(
-                DateTimeOffset timeout,
+                DateTimeOffset? timeout,
                 Peer target,
                 Peer replacement,
                 bool bootstrap)
@@ -485,7 +492,7 @@ namespace Libplanet.Net.Protocols
                 Bootstrap = bootstrap;
             }
 
-            public DateTimeOffset Timeout { get; set; }
+            public DateTimeOffset? Timeout { get; set; }
 
             public Peer Target { get; }
 
