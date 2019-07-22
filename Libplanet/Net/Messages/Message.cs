@@ -22,11 +22,6 @@ namespace Libplanet.Net.Messages
             Pong = 0x02,
 
             /// <summary>
-            /// Peer's delta set to sync peer list.
-            /// </summary>
-            PeerSetDelta = 0x03,
-
-            /// <summary>
             /// Request to query block hashes.
             /// </summary>
             GetBlockHashes = 0x04,
@@ -111,7 +106,6 @@ namespace Libplanet.Net.Messages
             {
                 { MessageType.Ping, typeof(Ping) },
                 { MessageType.Pong, typeof(Pong) },
-                { MessageType.PeerSetDelta, typeof(PeerSetDelta) },
                 { MessageType.GetBlockHashes, typeof(GetBlockHashes) },
                 { MessageType.BlockHashes, typeof(BlockHashes) },
                 { MessageType.TxIds, typeof(TxIds) },

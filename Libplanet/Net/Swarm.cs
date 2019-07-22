@@ -131,8 +131,6 @@ namespace Libplanet.Net
                 DateTimeOffset.UtcNow);
             LastDistributed = now;
             LastReceived = now;
-            DeltaDistributed = new AsyncAutoResetEvent();
-            DeltaReceived = new AsyncAutoResetEvent();
             TxReceived = new AsyncAutoResetEvent();
             BlockReceived = new AsyncAutoResetEvent();
             DifferentVersionPeerEncountered = differentVersionPeerEncountered;
@@ -209,10 +207,6 @@ namespace Libplanet.Net
         // FIXME : this exception throwing should be returned.
             /*throw new SwarmException(
                 "Can't translate unbound Swarm to Peer.");*/
-
-        public AsyncAutoResetEvent DeltaReceived { get; }
-
-        public AsyncAutoResetEvent DeltaDistributed { get; }
 
         public AsyncAutoResetEvent TxReceived { get; }
 
@@ -351,7 +345,6 @@ namespace Libplanet.Net
                 if (Running)
                 {
                     _removedPeers[AsPeer] = DateTimeOffset.UtcNow;
-                    DistributeDelta(false);
 
                     if (_broadcastQueue.Any() || _replyQueue.Any())
                     {
@@ -486,7 +479,6 @@ namespace Libplanet.Net
 
                 var tasks = new List<Task>
                 {
-                    RepeatDeltaDistributionAsync(distributeInterval, _cancellationToken),
                     BroadcastTxAsync(broadcastTxInterval, _cancellationToken),
                     Task.Run(() => _poller.Run(), _cancellationToken),
                 };
@@ -1086,13 +1078,6 @@ namespace Libplanet.Net
                         break;
                     }
 
-                case Messages.PeerSetDelta peerSetDelta:
-                    {
-                        await ProcessDeltaAsync(
-                            peerSetDelta.Delta, cancellationToken);
-                        break;
-                    }
-
                 case GetBlockHashes getBlockHashes:
                     {
                         IEnumerable<HashDigest<SHA256>> hashes =
@@ -1546,75 +1531,6 @@ namespace Libplanet.Net
             _replyQueue.Enqueue(reply);
         }
 
-        private async Task ProcessDeltaAsync(
-            PeerSetDelta delta,
-            CancellationToken cancellationToken
-        )
-        {
-            Peer sender = delta.Sender;
-
-            if (IsUnknownPeer(sender))
-            {
-                _logger.Debug("The sender of delta is unknown.");
-                if (IsDifferentProtocolVersion(sender) &&
-                    sender.AppProtocolVersion is int senderVersion)
-                {
-                    var args = new DifferentProtocolVersionEventArgs
-                        {
-                            ExpectedVersion = _appProtocolVersion,
-                            ActualVersion = senderVersion,
-                        };
-                    DifferentVersionPeerEncountered?.Invoke(this, args);
-                    return;
-                }
-
-                if (!delta.RemovedPeers.Contains(delta.Sender))
-                {
-                    delta = new PeerSetDelta(
-                        delta.Sender,
-                        delta.Timestamp,
-                        delta.AddedPeers.Add(sender),
-                        delta.RemovedPeers,
-                        delta.ExistingPeers
-                    );
-                }
-            }
-
-            if (IsDifferentProtocolVersion(sender))
-            {
-                delta = new PeerSetDelta(
-                    delta.Sender,
-                    delta.Timestamp,
-                    new Peer[] { }.ToImmutableHashSet(),
-                    delta.RemovedPeers,
-                    new Peer[] { }.ToImmutableHashSet());
-            }
-
-            _logger.Debug($"Received the delta[{delta}].");
-
-            using (await _receiveMutex.LockAsync(cancellationToken))
-            {
-                _logger.Debug($"Trying to apply the delta[{delta}]...");
-                await ApplyDelta(delta, cancellationToken);
-
-                bool alreadyReceived =
-                    LastSeenTimestamps.TryGetValue(
-                        delta.Sender,
-                        out DateTimeOffset existingTimestamp) &&
-                    existingTimestamp > delta.Timestamp;
-
-                if (!alreadyReceived)
-                {
-                    LastReceived = delta.Timestamp;
-                    LastSeenTimestamps[delta.Sender] = delta.Timestamp;
-                }
-
-                DeltaReceived.Set();
-            }
-
-            _logger.Debug($"The delta[{delta}] has been applied.");
-        }
-
         private bool IsUnknownPeer(Peer sender)
         {
             Peer existing = _peers.Keys
@@ -1640,122 +1556,6 @@ namespace Libplanet.Net
         private bool IsDifferentProtocolVersion(Peer sender)
         {
             return sender.AppProtocolVersion != _appProtocolVersion;
-        }
-
-        private async Task ApplyDelta(
-            PeerSetDelta delta,
-            CancellationToken cancellationToken
-        )
-        {
-            bool firstEncounter = IsUnknownPeer(delta.Sender);
-            RemovePeers(delta.RemovedPeers, delta.Timestamp);
-            var addedPeers = new HashSet<Peer>(delta.AddedPeers);
-
-            if (delta.ExistingPeers != null)
-            {
-                ImmutableHashSet<PublicKey> removedPublicKeys = _removedPeers
-                    .Keys.Select(p => p.PublicKey)
-                    .ToImmutableHashSet();
-                addedPeers.UnionWith(
-                    delta.ExistingPeers.Where(
-                        p => !removedPublicKeys.Contains(p.PublicKey)
-                    )
-                );
-            }
-
-            _logger.Debug("Trying to add peers...");
-            ISet<Peer> added = await AddPeersAsync(
-                addedPeers, delta.Timestamp, cancellationToken);
-            if (_logger.IsEnabled(LogEventLevel.Debug))
-            {
-                DumpDiffs(
-                    delta,
-                    added,
-                    addedPeers.Except(added),
-                    delta.RemovedPeers
-                );
-            }
-
-            if (firstEncounter)
-            {
-                DistributeDelta(true);
-            }
-        }
-
-        private void DumpDiffs(
-            PeerSetDelta delta,
-            IEnumerable<Peer> added,
-            IEnumerable<Peer> existing,
-            IEnumerable<Peer> removed)
-        {
-            DateTimeOffset timestamp = delta.Timestamp;
-
-            foreach (Peer peer in added)
-            {
-                _logger.Debug($"{timestamp} {delta.Sender} > +{peer}");
-            }
-
-            foreach (Peer peer in existing)
-            {
-                _logger.Debug($"{timestamp} {delta.Sender} > {peer}");
-            }
-
-            foreach (Peer peer in removed)
-            {
-                _logger.Debug($"{timestamp} {delta.Sender} > -{peer}");
-            }
-        }
-
-        private void RemovePeers(
-            IEnumerable<Peer> peers, DateTimeOffset timestamp)
-        {
-            PublicKey publicKey = _privateKey.PublicKey;
-            var peersAsArray = peers as Peer[] ?? peers.ToArray();
-            foreach (Peer peer in peersAsArray)
-            {
-                if (peer.PublicKey != publicKey)
-                {
-                    continue;
-                }
-
-                _removedPeers[peer] = timestamp;
-            }
-
-            Dictionary<PublicKey, Peer[]> existingPeers =
-                _peers.Keys.ToDictionary(
-                    p => p.PublicKey,
-                    p => new[] { p }
-                );
-
-            foreach (Peer peer in peersAsArray)
-            {
-                _peers.Remove(peer);
-
-                _logger.Debug(
-                    $"Trying to close dealers associated {peer}."
-                );
-                if (Running)
-                {
-                    CloseDealer(peer);
-                }
-
-                var pubKey = peer.PublicKey;
-
-                if (existingPeers.TryGetValue(pubKey, out Peer[] remains))
-                {
-                    foreach (Peer key in remains)
-                    {
-                        _peers.Remove(key);
-
-                        if (Running)
-                        {
-                            CloseDealer(key);
-                        }
-                    }
-                }
-
-                _logger.Debug($"Dealers associated {peer} were closed.");
-            }
         }
 
         private void CloseDealer(Peer peer)
@@ -1858,59 +1658,6 @@ namespace Libplanet.Net
             {
                 dealer.Dispose();
                 throw;
-            }
-        }
-
-        private void DistributeDelta(bool all)
-        {
-            CheckStarted();
-
-            DateTimeOffset now = DateTimeOffset.UtcNow;
-            var addedPeers = FilterPeers(
-                _peers,
-                before: now,
-                after: LastDistributed).ToImmutableHashSet();
-            var removedPeers = FilterPeers(
-                _removedPeers,
-                before: now,
-                remove: true).ToImmutableHashSet();
-            var existingPeers = all
-                    ? _peers.Keys.ToImmutableHashSet().Except(addedPeers)
-                    : null;
-            var delta = new PeerSetDelta(
-                sender: AsPeer,
-                timestamp: now,
-                addedPeers: addedPeers,
-                removedPeers: removedPeers,
-                existingPeers: existingPeers
-            );
-
-            _logger.Debug(
-                $"Trying to distribute own delta " +
-                $"(+{delta.AddedPeers.Count}, -{delta.RemovedPeers.Count})..."
-            );
-            if (delta.AddedPeers.Any() || delta.RemovedPeers.Any() || all)
-            {
-                LastDistributed = now;
-
-                var message = new Messages.PeerSetDelta(delta);
-                _logger.Debug("Send the delta to dealers...");
-                _broadcastQueue.Enqueue(message);
-
-                _logger.Debug("The delta has been sent.");
-                DeltaDistributed.Set();
-            }
-        }
-
-        private async Task RepeatDeltaDistributionAsync(
-            TimeSpan interval, CancellationToken cancellationToken)
-        {
-            int i = 1;
-            while (!cancellationToken.IsCancellationRequested)
-            {
-                DistributeDelta(i % 10 == 0);
-                await Task.Delay(interval, cancellationToken);
-                i = (i + 1) % 10;
             }
         }
 
