@@ -246,7 +246,7 @@ namespace Libplanet.Net
             }
         }
 
-        internal ICollection<Peer> Peers => _protocol.Peers;
+        internal ICollection<Peer> Peers => _protocol?.Peers;
 
         /// <summary>
         /// Waits until this <see cref="Swarm{T}"/> instance gets started to run.
@@ -495,7 +495,7 @@ namespace Libplanet.Net
         internal string Trace()
         {
             KademliaProtocol<T> kp = (KademliaProtocol<T>)_protocol;
-            return kp.Trace();
+            return kp?.Trace();
         }
 
         internal void BroadcastMessage(Message message)
@@ -512,6 +512,11 @@ namespace Libplanet.Net
 
         internal async Task<DealerSocket> GetDealerSocket(Peer peer)
         {
+            if (!Running)
+            {
+                return null;
+            }
+
             if (_turnClient != null)
             {
                 await CreatePermission(peer);
@@ -606,24 +611,45 @@ namespace Libplanet.Net
             )
         {
             DealerSocket dealer = await GetDealerSocket(peer);
-            dealer.Connect(ToNetMQAddress(peer));
-            var request = new GetBlockHashes(locator, stop);
-
-            _logger.Debug($"Send GetBlockHashesAsync to [{peer.Address.ToHex()}]");
-            dealer.SendMultipartMessage(request.ToNetMQMessage(_privateKey, AsPeer));
-
-            NetMQMessage response = dealer.ReceiveMultipartMessage();
-            _logger.Debug("Received BlockHashes");
-            Message parsedMessage = Message.Parse(response, reply: true);
-            dealer.Dispose();
-            if (parsedMessage is BlockHashes blockHashes)
+            try
             {
-                return blockHashes.Hashes;
-            }
+                dealer.Connect(ToNetMQAddress(peer));
+                var request = new GetBlockHashes(locator, stop);
 
-            throw new InvalidMessageException(
-                $"The response of GetBlockHashes isn't BlockHashes. " +
-                $"but {parsedMessage}");
+                _logger.Debug($"Send GetBlockHashesAsync to [{peer.Address.ToHex()}]");
+                dealer.SendMultipartMessage(request.ToNetMQMessage(_privateKey, AsPeer));
+
+                NetMQMessage response = dealer.ReceiveMultipartMessage();
+                _logger.Debug("Received BlockHashes");
+                Message parsedMessage = Message.Parse(response, reply: true);
+
+                if (parsedMessage is BlockHashes blockHashes)
+                {
+                    return blockHashes.Hashes;
+                }
+                else
+                {
+                    throw new InvalidMessageException(
+                        $"The response of GetBlockHashes isn't BlockHashes. " +
+                        $"but {parsedMessage}");
+                }
+            }
+            catch (InvalidBlockDifficultyException ex)
+            {
+                _logger.Error("InvalidBlockDifficultyException occurred " +
+                    $"during GetBlockHashesAsync() {ex}");
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.Error("Unexpected exception occurred " +
+                    $"during GetBlockHashesAsync() {ex}");
+                throw;
+            }
+            finally
+            {
+                dealer.Dispose();
+            }
         }
 
         internal IAsyncEnumerable<Block<T>> GetBlocksAsync(
@@ -676,6 +702,11 @@ namespace Libplanet.Net
                 catch (TimeoutException)
                 {
                     _logger.Debug($"Timeout occured");
+                    throw;
+                }
+                catch (Exception)
+                {
+                    _logger.Debug($"Unexpected exception occurred during GetBlocksAsync()");
                     throw;
                 }
                 finally
