@@ -917,7 +917,7 @@ namespace Libplanet.Tests.Net
 
                 swarmB.BroadcastBlocks(new[] { chainB.Last() });
 
-                await Task.Delay(2000);
+                await Task.Delay(5000);
 
                 // chainB doesn't applied to chainA since chainB is shorter
                 // than chainA.
@@ -926,9 +926,12 @@ namespace Libplanet.Tests.Net
 
                 swarmA.BroadcastBlocks(new[] { chainA.Last() });
 
-                await Task.Delay(2000);
+                await Task.Delay(5000);
 
                 Assert.Equal(chainA.AsEnumerable(), chainB);
+
+                Log.Debug($"{swarmA.Trace()}");
+                Log.Debug($"{swarmB.Trace()}");
             }
             finally
             {
@@ -936,9 +939,6 @@ namespace Libplanet.Tests.Net
                     swarmA.StopAsync(),
                     swarmB.StopAsync());
             }
-
-            Log.Debug($"{swarmA.Trace()}");
-            Log.Debug($"{swarmB.Trace()}");
         }
 
         [Fact(Timeout = Timeout)]
