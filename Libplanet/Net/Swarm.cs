@@ -587,7 +587,14 @@ namespace Libplanet.Net
 
         internal void ReplyMessage(Message message)
         {
-            _replyQueue.Enqueue(message);
+            if (Running)
+            {
+                _replyQueue.Enqueue(message);
+            }
+            else
+            {
+                throw new SwarmException("Cannot reply message after swarm stopped.");
+            }
         }
 
         // FIXME: Should deal with peer not found exception
@@ -896,7 +903,7 @@ namespace Libplanet.Net
                         {
                             Identity = getBlockHashes.Identity,
                         };
-                        _replyQueue.Enqueue(reply);
+                        ReplyMessage(reply);
                         break;
                     }
 
