@@ -1,7 +1,7 @@
 using System;
 using System.Runtime.Serialization;
 
-namespace Libplanet.Net
+namespace Libplanet.Net.Protocols
 {
     [Serializable]
     public class PeerNotFoundException : SwarmException
