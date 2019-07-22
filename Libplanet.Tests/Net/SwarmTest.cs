@@ -886,6 +886,74 @@ namespace Libplanet.Tests.Net
                     new PrivateKey(),
                     appProtocolVersion: 1,
                     host: IPAddress.Loopback.ToString());
+
+            BlockChain<DumbAction> chainA = _blockchains[0];
+            BlockChain<DumbAction> chainB = _blockchains[1];
+
+            Log.Debug(BitConverter.ToString(new PrivateKey().ByteArray));
+
+            // chainA, chainB and chainC shares genesis block.
+            Block<DumbAction> genesis = chainA.MineBlock(_fx[0].Address1);
+            chainB.Append(genesis);
+
+            foreach (int i in Enumerable.Range(0, 10))
+            {
+                chainA.MineBlock(_fx[0].Address1);
+                await Task.Delay(100);
+            }
+
+            foreach (int i in Enumerable.Range(0, 3))
+            {
+                chainB.MineBlock(_fx[1].Address1);
+                await Task.Delay(100);
+            }
+
+            try
+            {
+                await StartAsync(swarmA);
+                await StartAsync(swarmB);
+
+                await swarmB.BootstrapAsync(new[] { swarmA.AsPeer });
+
+                swarmB.BroadcastBlocks(new[] { chainB.Last() });
+
+                await Task.Delay(2000);
+
+                // chainB doesn't applied to chainA since chainB is shorter
+                // than chainA.
+                // this cannot be tested if preload is done in bootstrap...
+                Assert.NotEqual(chainB.AsEnumerable(), chainA);
+
+                swarmA.BroadcastBlocks(new[] { chainA.Last() });
+
+                await Task.Delay(2000);
+
+                Assert.Equal(chainA.AsEnumerable(), chainB);
+            }
+            finally
+            {
+                await Task.WhenAll(
+                    swarmA.StopAsync(),
+                    swarmB.StopAsync());
+            }
+
+            Log.Debug($"{swarmA.Trace()}");
+            Log.Debug($"{swarmB.Trace()}");
+        }
+
+        [Fact(Timeout = Timeout)]
+        public async Task CanBroadcastBlockMulti()
+        {
+            Swarm<DumbAction> swarmA = new Swarm<DumbAction>(
+                    _blockchains[0],
+                    new PrivateKey(),
+                    appProtocolVersion: 1,
+                    host: IPAddress.Loopback.ToString());
+            Swarm<DumbAction> swarmB = new Swarm<DumbAction>(
+                    _blockchains[1],
+                    new PrivateKey(),
+                    appProtocolVersion: 1,
+                    host: IPAddress.Loopback.ToString());
             Swarm<DumbAction> swarmC = new Swarm<DumbAction>(
                     _blockchains[2],
                     new PrivateKey(),
@@ -895,6 +963,8 @@ namespace Libplanet.Tests.Net
             BlockChain<DumbAction> chainA = _blockchains[0];
             BlockChain<DumbAction> chainB = _blockchains[1];
             BlockChain<DumbAction> chainC = _blockchains[2];
+
+            Log.Debug(BitConverter.ToString(new PrivateKey().ByteArray));
 
             // chainA, chainB and chainC shares genesis block.
             Block<DumbAction> genesis = chainA.MineBlock(_fx[0].Address1);
@@ -924,7 +994,7 @@ namespace Libplanet.Tests.Net
 
                 swarmB.BroadcastBlocks(new[] { chainB.Last() });
 
-                await Task.Delay(10000);
+                await Task.Delay(5000);
 
                 // chainC may or may not be changed, because swarmC may not
                 // be directly connected to swarmB.
@@ -935,10 +1005,14 @@ namespace Libplanet.Tests.Net
 
                 swarmA.BroadcastBlocks(new[] { chainA.Last() });
 
-                await Task.Delay(10000);
+                await Task.Delay(5000);
 
                 Assert.Equal(chainA.AsEnumerable(), chainB);
                 Assert.Equal(chainA.AsEnumerable(), chainC);
+
+                Log.Debug($"{swarmA.Trace()}");
+                Log.Debug($"{swarmB.Trace()}");
+                Log.Debug($"{swarmC.Trace()}");
             }
             finally
             {
@@ -946,13 +1020,6 @@ namespace Libplanet.Tests.Net
                     swarmA.StopAsync(),
                     swarmB.StopAsync(),
                     swarmC.StopAsync());
-            }
-
-            for (int i = 0; i < 3; i++)
-            {
-                Log.Debug($"{swarmA.Trace()}");
-                Log.Debug($"{swarmB.Trace()}");
-                Log.Debug($"{swarmC.Trace()}");
             }
         }
 
