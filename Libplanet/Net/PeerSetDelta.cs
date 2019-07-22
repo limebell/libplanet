@@ -2,6 +2,7 @@ using System;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Runtime.Serialization;
+using Libplanet.Net.Protocols;
 using Libplanet.Serialization;
 
 namespace Libplanet.Net

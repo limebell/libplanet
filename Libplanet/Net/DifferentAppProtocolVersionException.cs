@@ -1,4 +1,5 @@
 using System;
+using Libplanet.Net.Protocols;
 
 namespace Libplanet.Net
 {
