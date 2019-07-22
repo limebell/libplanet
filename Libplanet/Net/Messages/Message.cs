@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Libplanet.Crypto;
+using Libplanet.Net.Protocols;
 using NetMQ;
 
 namespace Libplanet.Net.Messages
@@ -61,6 +62,16 @@ namespace Libplanet.Net.Messages
             Tx = 0x10,
 
             /// <summary>
+            /// Message containing request for nearby peers.
+            /// </summary>
+            FindPeer = 0x11,
+
+            /// <summary>
+            /// Message containing nearby peers.
+            /// </summary>
+            Neighbours = 0x12,
+
+            /// <summary>
             /// Request to query calculated states.
             /// </summary>
             GetRecentStates = 0x0b,
@@ -74,6 +85,8 @@ namespace Libplanet.Net.Messages
 
         public byte[] Identity { get; set; }
 
+        public Peer Remote { get; set; }
+
         protected abstract MessageType Type { get; }
 
         protected abstract IEnumerable<NetMQFrame> DataFrames { get; }
@@ -85,21 +98,14 @@ namespace Libplanet.Net.Messages
                 throw new ArgumentException("Can't parse empty NetMQMessage.");
             }
 
-            // (reply == true)  [type, sign, pubkey, frames...]
-            // (reply == false) [identity, type, sign, pubkey, frames...]
+            // (reply == true)  [type, sign, peer, frames...]
+            // (reply == false) [identity, type, sign, peer, frames...]
             int headerCount = reply ? 3 : 4;
             var rawType = (MessageType)raw[headerCount - 3].ConvertToInt32();
-            var publicKey = new PublicKey(raw[headerCount - 2].ToByteArray());
+            var peer = raw[headerCount - 2].ToByteArray();
             byte[] signature = raw[headerCount - 1].ToByteArray();
 
             NetMQFrame[] body = raw.Skip(headerCount).ToArray();
-
-            if (!publicKey.Verify(body.ToByteArray(), signature))
-            {
-                throw new InvalidMessageException(
-                    "the message signature is invalid"
-                );
-            }
 
             var types = new Dictionary<MessageType, Type>
             {
@@ -113,6 +119,8 @@ namespace Libplanet.Net.Messages
                 { MessageType.GetTxs, typeof(GetTxs) },
                 { MessageType.Blocks, typeof(Blocks) },
                 { MessageType.Tx, typeof(Tx) },
+                { MessageType.FindPeer, typeof(FindPeer) },
+                { MessageType.Neighbours, typeof(Neighbours) },
                 { MessageType.GetRecentStates, typeof(GetRecentStates) },
                 { MessageType.RecentStates, typeof(RecentStates) },
             };
@@ -125,6 +133,14 @@ namespace Libplanet.Net.Messages
 
             var message = (Message)Activator.CreateInstance(
                 type, new[] { body });
+            message.Remote = Peer.Deserialize(peer);
+
+            if (!message.Remote.PublicKey.Verify(body.ToByteArray(), signature))
+            {
+                throw new InvalidMessageException(
+                    "the message signature is invalid"
+                );
+            }
 
             if (!reply)
             {
@@ -134,8 +150,14 @@ namespace Libplanet.Net.Messages
             return message;
         }
 
-        public NetMQMessage ToNetMQMessage(PrivateKey key)
+        public NetMQMessage ToNetMQMessage(PrivateKey key, Peer self)
         {
+            if (self is null)
+            {
+                // throw new ArgumentNullException(nameof(self));
+                self = new Peer(key.PublicKey, new System.Net.DnsEndPoint("0.0.0.0", 1234));
+            }
+
             var message = new NetMQMessage();
 
             // Write body (by concrete class)
@@ -146,7 +168,7 @@ namespace Libplanet.Net.Messages
 
             // Write headers. (inverse order)
             message.Push(key.Sign(message.ToByteArray()));
-            message.Push(key.PublicKey.Format(true));
+            message.Push(self.Serialize());
             message.Push((byte)Type);
 
             if (Identity is byte[] to)

@@ -17,6 +17,7 @@ using Libplanet.Blockchain;
 using Libplanet.Blocks;
 using Libplanet.Crypto;
 using Libplanet.Net.Messages;
+using Libplanet.Net.Protocols;
 using Libplanet.Store;
 using Libplanet.Stun;
 using Libplanet.Tx;
@@ -203,8 +204,11 @@ namespace Libplanet.Net
                 EndPoint,
                 _appProtocolVersion,
                 _publicIPAddress)
-            : throw new SwarmException(
-                "Can't translate unbound Swarm to Peer.");
+            : null;
+
+        // FIXME : this exception throwing should be returned.
+            /*throw new SwarmException(
+                "Can't translate unbound Swarm to Peer.");*/
 
         public AsyncAutoResetEvent DeltaReceived { get; }
 
@@ -649,6 +653,11 @@ namespace Libplanet.Net
             }
         }
 
+        internal async Task SendMessageAsync(Peer peer, Message message)
+        {
+            await Task.Delay(0);
+        }
+
         internal async Task<IEnumerable<HashDigest<SHA256>>>
             GetBlockHashesAsync(
                 Peer peer,
@@ -668,7 +677,7 @@ namespace Libplanet.Net
             using (var socket = new DealerSocket(ToNetMQAddress(peer)))
             {
                 await socket.SendMultipartMessageAsync(
-                    request.ToNetMQMessage(_privateKey),
+                    request.ToNetMQMessage(_privateKey, AsPeer),
                     cancellationToken: token);
 
                 NetMQMessage response =
@@ -706,7 +715,7 @@ namespace Libplanet.Net
                         blockHashes.ToArray();
                     var request = new GetBlocks(blockHashesAsArray);
                     await socket.SendMultipartMessageAsync(
-                        request.ToNetMQMessage(_privateKey),
+                        request.ToNetMQMessage(_privateKey, AsPeer),
                         cancellationToken: yieldToken);
 
                     int hashCount = blockHashesAsArray.Count();
@@ -759,7 +768,7 @@ namespace Libplanet.Net
                     var txIdsAsArray = txIds as TxId[] ?? txIds.ToArray();
                     var request = new GetTxs(txIdsAsArray);
                     await socket.SendMultipartMessageAsync(
-                        request.ToNetMQMessage(_privateKey),
+                        request.ToNetMQMessage(_privateKey, AsPeer),
                         cancellationToken: cancellationToken);
 
                     int hashCount = txIdsAsArray.Count();
@@ -934,7 +943,7 @@ namespace Libplanet.Net
                 {
                     _logger.Debug("Requests recent states to a peer ({0}).", peer);
                     await socket.SendMultipartMessageAsync(
-                        request.ToNetMQMessage(_privateKey),
+                        request.ToNetMQMessage(_privateKey, AsPeer),
                         cancellationToken: cancellationToken
                     );
                     _logger.Debug("Requested recent states to a peer ({0}).", peer);
@@ -1770,7 +1779,7 @@ namespace Libplanet.Net
             _logger.Debug($"Trying to Ping to [{address}]...");
             var ping = new Ping();
             await dealer.SendMultipartMessageAsync(
-                ping.ToNetMQMessage(_privateKey),
+                ping.ToNetMQMessage(_privateKey, AsPeer),
                 cancellationToken: cancellationToken);
 
             _logger.Debug($"Waiting for Pong from [{address}]...");
@@ -1945,7 +1954,7 @@ namespace Libplanet.Net
         private void DoBroadcast(object sender, NetMQQueueEventArgs<Message> e)
         {
             Message msg = e.Queue.Dequeue();
-            NetMQMessage netMQMessage = msg.ToNetMQMessage(_privateKey);
+            NetMQMessage netMQMessage = msg.ToNetMQMessage(_privateKey, AsPeer);
 
             // FIXME Should replace with PUB/SUB model.
             try
@@ -1975,7 +1984,7 @@ namespace Libplanet.Net
         {
             Message msg = e.Queue.Dequeue();
             _logger.Debug($"Reply {msg} to {ByteUtil.Hex(msg.Identity)}...");
-            NetMQMessage netMQMessage = msg.ToNetMQMessage(_privateKey);
+            NetMQMessage netMQMessage = msg.ToNetMQMessage(_privateKey, AsPeer);
             _router.SendMultipartMessage(netMQMessage);
             _logger.Debug($"Replied.");
         }
