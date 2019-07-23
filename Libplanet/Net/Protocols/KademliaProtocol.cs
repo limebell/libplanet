@@ -103,15 +103,18 @@ namespace Libplanet.Net.Protocols
                     continue;
                 }
 
-                await PingAsync(bootstrapPeer, bootstrap: true);
+                // Guarantees at least one connection (seed peer)
+                await PingAsync(bootstrapPeer, withoutTimeout: true, bootstrap: true);
             }
 
-            // should think of the way if bootstraping is done,
+            // Should think of the way if bootstraping is done,
             // in order to get closest peer for preloading in swarm
-            await Task.Delay((int)RequestTimeout, cancellationToken);
+            await Task.WhenAll(
+                _bootstrapCompleted.WaitAsync(cancellationToken),
+                Task.Delay((int)RequestTimeout, cancellationToken));
         }
 
-        // this updates routing table when receiving a message.
+        // This updates routing table when receiving a message.
         // if corresponding bucket for remote peer is not full, just adds remote peer.
         // otherwise check whether if the least recently used (LRU) peer
         // is alive to determine evict LRU peer or discard remote peer.
@@ -192,6 +195,8 @@ namespace Libplanet.Net.Protocols
 
                 if (ep.Bootstrap)
                 {
+                    // This ensures connection with seed peer
+                    _bootstrapCompleted.Set();
                     await DoFindPeerAsync(_thisPeer.Address, ep.Target);
                 }
             }
