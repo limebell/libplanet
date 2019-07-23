@@ -712,10 +712,12 @@ namespace Libplanet.Net
             }
             catch (TimeoutException)
             {
+                dealer.Dispose();
                 _logger.Debug("Timeout occurred during SendMessageAsync().");
             }
             catch (Exception e)
             {
+                dealer.Dispose();
                 _logger.Error(e, "An unexpected exception occurred during SendMessageAsync()");
                 throw;
             }
