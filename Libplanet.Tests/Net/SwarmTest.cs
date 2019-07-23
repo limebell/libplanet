@@ -187,9 +187,7 @@ namespace Libplanet.Tests.Net
                 await StartAsync(a);
                 await StartAsync(b);
 
-                await a.AddPeersAsync(new Peer[] { b.AsPeer });
-
-                await Task.Delay(1000);
+                await a.AddPeersAsync(new Peer[] { b.AsPeer }, true);
 
                 Assert.Contains(a.AsPeer, b.Peers);
                 Assert.Contains(b.AsPeer, a.Peers);
@@ -243,7 +241,7 @@ namespace Libplanet.Tests.Net
                 await StartAsync(a);
                 await StartAsync(b);
 
-                await a.AddPeersAsync(new[] { b.AsPeer });
+                await a.AddPeersAsync(new[] { b.AsPeer }, true);
 
                 await Task.Delay(10000);
                 minerCanceller.Cancel();
@@ -303,11 +301,9 @@ namespace Libplanet.Tests.Net
 
                 foreach (var peer in peers)
                 {
-                    await a.AddPeersAsync(new[] { peer });
-                    await b.AddPeersAsync(new[] { peer });
+                    await a.AddPeersAsync(new[] { peer }, true);
+                    await b.AddPeersAsync(new[] { peer }, true);
                 }
-
-                await Task.Delay(3000);
 
                 Assert.Equal(new[] { c.AsPeer }, a.Peers.ToArray());
                 Assert.Equal(new[] { d.AsPeer }, b.Peers.ToArray());
@@ -348,9 +344,7 @@ namespace Libplanet.Tests.Net
                 await StartAsync(a);
                 await StartAsync(b);
 
-                await a.AddPeersAsync(new[] { b.AsPeer });
-
-                await Task.Delay(1000);
+                await a.AddPeersAsync(new[] { b.AsPeer }, true);
 
                 Assert.True(isCalled);
             }
@@ -405,9 +399,7 @@ namespace Libplanet.Tests.Net
                 await StartAsync(swarmA);
                 await StartAsync(swarmB);
 
-                await swarmA.AddPeersAsync(new[] { swarmB.AsPeer });
-
-                await Task.Delay(1000);
+                await swarmA.AddPeersAsync(new[] { swarmB.AsPeer }, true);
 
                 IEnumerable<HashDigest<SHA256>> inventories1 =
                     await swarmB.GetBlockHashesAsync(
@@ -471,9 +463,7 @@ namespace Libplanet.Tests.Net
 
                 var peer = swarmA.AsPeer;
 
-                await swarmB.AddPeersAsync(new[] { peer });
-
-                await Task.Delay(1000);
+                await swarmB.AddPeersAsync(new[] { peer }, true);
 
                 IEnumerable<HashDigest<SHA256>> hashes =
                     await swarmB.GetBlockHashesAsync(
@@ -532,9 +522,7 @@ namespace Libplanet.Tests.Net
                 await StartAsync(swarmA);
                 await StartAsync(swarmB);
 
-                await swarmA.AddPeersAsync(new[] { swarmB.AsPeer });
-
-                await Task.Delay(1000);
+                await swarmA.AddPeersAsync(new[] { swarmB.AsPeer }, true);
 
                 List<Transaction<DumbAction>> txs =
                     await swarmA.GetTxsAsync(
@@ -578,11 +566,9 @@ namespace Libplanet.Tests.Net
                 await StartAsync(swarmB);
                 await StartAsync(swarmC);
 
-                await swarmA.AddPeersAsync(new[] { swarmB.AsPeer });
-                await swarmB.AddPeersAsync(new[] { swarmC.AsPeer });
-                await swarmC.AddPeersAsync(new[] { swarmA.AsPeer });
-
-                await Task.Delay(3000);
+                await swarmA.AddPeersAsync(new[] { swarmB.AsPeer }, true);
+                await swarmB.AddPeersAsync(new[] { swarmC.AsPeer }, true);
+                await swarmC.AddPeersAsync(new[] { swarmA.AsPeer }, true);
 
                 swarmA.BroadcastTxs(new[] { tx });
 
@@ -624,9 +610,7 @@ namespace Libplanet.Tests.Net
                 await StartAsync(swarmA);
                 await StartAsync(swarmB);
 
-                await swarmA.AddPeersAsync(new[] { swarmB.AsPeer });
-
-                await Task.Delay(1000);
+                await swarmA.AddPeersAsync(new[] { swarmB.AsPeer }, true);
 
                 await swarmB.TxReceived.WaitAsync();
                 Assert.Equal(txA, chainB.Transactions[txA.Id]);
@@ -667,9 +651,7 @@ namespace Libplanet.Tests.Net
                 await StartAsync(swarmC);
 
                 // Broadcast tx swarmA to swarmB
-                await swarmA.AddPeersAsync(new[] { swarmB.AsPeer });
-
-                await Task.Delay(1000);
+                await swarmA.AddPeersAsync(new[] { swarmB.AsPeer }, true);
 
                 await swarmB.TxReceived.WaitAsync();
                 Assert.Equal(tx, chainB.Transactions[tx.Id]);
@@ -677,9 +659,7 @@ namespace Libplanet.Tests.Net
                 await swarmA.StopAsync();
 
                 // Re-Broadcast received tx swarmB to swarmC
-                await swarmB.AddPeersAsync(new[] { swarmC.AsPeer });
-
-                await Task.Delay(1000);
+                await swarmB.AddPeersAsync(new[] { swarmC.AsPeer }, true);
 
                 await swarmC.TxReceived.WaitAsync();
                 Assert.Equal(tx, chainC.Transactions[tx.Id]);
@@ -727,11 +707,9 @@ namespace Libplanet.Tests.Net
                 await StartAsync(swarmB);
                 await StartAsync(swarmC);
 
-                await swarmA.AddPeersAsync(new[] { swarmB.AsPeer });
-                await swarmB.AddPeersAsync(new[] { swarmC.AsPeer });
-                await swarmC.AddPeersAsync(new[] { swarmA.AsPeer });
-
-                await Task.Delay(3000);
+                await swarmA.AddPeersAsync(new[] { swarmB.AsPeer }, true);
+                await swarmB.AddPeersAsync(new[] { swarmC.AsPeer }, true);
+                await swarmC.AddPeersAsync(new[] { swarmA.AsPeer }, true);
 
                 swarmB.BroadcastBlocks(new[] { chainB.Last() });
 
@@ -878,11 +856,9 @@ namespace Libplanet.Tests.Net
                 await StartAsync(swarmA);
                 await StartAsync(swarmB);
 
-                await swarmA.AddPeersAsync(new[] { seed.AsPeer });
-                await swarmB.AddPeersAsync(new[] { seed.AsPeer });
-                await swarmA.AddPeersAsync(new[] { swarmB.AsPeer });
-
-                await Task.Delay(3000);
+                await swarmA.AddPeersAsync(new[] { seed.AsPeer }, true);
+                await swarmB.AddPeersAsync(new[] { seed.AsPeer }, true);
+                await swarmA.AddPeersAsync(new[] { swarmB.AsPeer }, true);
 
                 Assert.Equal(
                     new HashSet<Peer> { swarmA.AsPeer, swarmB.AsPeer },
@@ -921,9 +897,7 @@ namespace Libplanet.Tests.Net
             {
                 await StartAsync(minerSwarm);
                 await StartAsync(receiverSwarm);
-                await receiverSwarm.AddPeersAsync(new[] { minerSwarm.AsPeer });
-
-                await Task.Delay(1000);
+                await receiverSwarm.AddPeersAsync(new[] { minerSwarm.AsPeer }, true);
 
                 await receiverSwarm.PreloadAsync();
 
@@ -959,7 +933,7 @@ namespace Libplanet.Tests.Net
             try
             {
                 await StartAsync(minerSwarm);
-                await receiverSwarm.AddPeersAsync(new[] { minerSwarm.AsPeer });
+                await receiverSwarm.AddPeersAsync(new[] { minerSwarm.AsPeer }, true);
 
                 var trustedStateValidators = new[] { minerSwarm.Address }.ToImmutableHashSet();
 
@@ -1008,11 +982,10 @@ namespace Libplanet.Tests.Net
             {
                 await StartAsync(minerSwarm);
                 await StartAsync(receiverSwarm);
-                await receiverSwarm.AddPeersAsync(new[] { minerSwarm.AsPeer });
+
+                await receiverSwarm.AddPeersAsync(new[] { minerSwarm.AsPeer }, true);
 
                 minerChain.FindNextHashesChunkSize = 2;
-                await Task.Delay(1000);
-
                 await receiverSwarm.PreloadAsync(progress);
 
                 Assert.Equal(minerChain.AsEnumerable(), receiverChain.AsEnumerable());
@@ -1092,7 +1065,8 @@ namespace Libplanet.Tests.Net
             {
                 await StartAsync(minerSwarm);
                 await StartAsync(receiverSwarm);
-                await receiverSwarm.AddPeersAsync(new[] { minerSwarm.AsPeer });
+
+                await receiverSwarm.AddPeersAsync(new[] { minerSwarm.AsPeer }, true);
 
                 DumbAction.RenderRecords.Value = ImmutableList<RenderRecord>.Empty;
                 MinerReward.RenderRecords.Value = ImmutableList<RenderRecord>.Empty;

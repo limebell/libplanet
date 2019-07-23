@@ -293,7 +293,11 @@ namespace Libplanet.Net.Protocols
         }
 
 #pragma warning disable SA1202 // Elements should be ordered by access
-        internal async Task PingAsync(Peer target, Peer replacement = null, bool bootstrap = false)
+        internal async Task PingAsync(
+            Peer target,
+            Peer replacement = null,
+            bool withoutTimeout = false,
+            bool bootstrap = false)
 #pragma warning restore SA1202 // Elements should be ordered by access
         {
             if (target is null)
@@ -309,15 +313,19 @@ namespace Libplanet.Net.Protocols
             _expectedPongs[pingid] = new ExpectedPong(null, target, replacement, bootstrap);
             await SendPingAsync(target, echo);
             _logger.Debug($"Ping's echo: ({ByteUtil.Hex(echo)})");
-            DateTimeOffset timeout =
-                DateTimeOffset.UtcNow + TimeSpan.FromMilliseconds(RequestTimeout);
-            if (_expectedPongs.ContainsKey(pingid))
+            if (!withoutTimeout)
             {
-                _expectedPongs[pingid] = new ExpectedPong(timeout, target, replacement, bootstrap);
-            }
-            else
-            {
-                _logger.Debug($"Pong of echo ({echo}) is received before setting the timeout.");
+                DateTimeOffset timeout =
+                    DateTimeOffset.UtcNow + TimeSpan.FromMilliseconds(RequestTimeout);
+                if (_expectedPongs.ContainsKey(pingid))
+                {
+                    _expectedPongs[pingid] =
+                        new ExpectedPong(timeout, target, replacement, bootstrap);
+                }
+                else
+                {
+                    _logger.Debug($"Pong of echo ({echo}) is received before setting the timeout.");
+                }
             }
         }
 
