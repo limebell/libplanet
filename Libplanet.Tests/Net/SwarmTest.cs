@@ -89,7 +89,10 @@ namespace Libplanet.Tests.Net
 
             foreach (Swarm<DumbAction> s in _swarms)
             {
-                s.StopAsync().Wait(DisposeTimeout);
+                if (s.Running)
+                {
+                    s.StopAsync().Wait(DisposeTimeout);
+                }
             }
 
             if (!(Type.GetType("Mono.Runtime") is null))
