@@ -9,7 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Libplanet.Action;
 using Libplanet.Net.Messages;
-using Libplanet.Net.Protocols;
+using Nito.AsyncEx;
 using Serilog;
 
 namespace Libplanet.Net.Protocols
@@ -32,6 +32,7 @@ namespace Libplanet.Net.Protocols
         private readonly ConcurrentBag<string> _deletedPingids;
         private readonly ConcurrentDictionary<Address, FindRequest> _findRequests;
         private readonly CancellationToken _cancellationToken;
+        private readonly AsyncAutoResetEvent _bootstrapCompleted;
 
         private readonly ILogger _logger;
 
@@ -53,6 +54,7 @@ namespace Libplanet.Net.Protocols
             _expectedPongs = new ConcurrentDictionary<string, ExpectedPong>();
             _deletedPingids = new ConcurrentBag<string>();
             _findRequests = new ConcurrentDictionary<Address, FindRequest>();
+            _bootstrapCompleted = new AsyncAutoResetEvent();
         }
 
         public int Count => _routing.Count;
@@ -85,7 +87,9 @@ namespace Libplanet.Net.Protocols
             }
         }
 
-        public async Task BootstrapAsync(List<Peer> bootstrapPeers)
+        public async Task BootstrapAsync(
+            List<Peer> bootstrapPeers,
+            CancellationToken cancellationToken)
         {
             if (bootstrapPeers is null)
             {
@@ -104,7 +108,7 @@ namespace Libplanet.Net.Protocols
 
             // should think of the way if bootstraping is done,
             // in order to get closest peer for preloading in swarm
-            await Task.Delay((int)RequestTimeout);
+            await Task.Delay((int)RequestTimeout, cancellationToken);
         }
 
         // this updates routing table when receiving a message.

@@ -203,6 +203,33 @@ namespace Libplanet.Tests.Net
         }
 
         [Fact(Timeout = Timeout)]
+        public async Task BootstrapAsync()
+        {
+            Swarm<DumbAction> swarmA = _swarms[0];
+            Swarm<DumbAction> swarmB = _swarms[1];
+            Swarm<DumbAction> swarmC = _swarms[2];
+
+            try
+            {
+                await StartAsync(swarmA);
+                await StartAsync(swarmB);
+                await StartAsync(swarmC);
+
+                await swarmB.BootstrapAsync(new Peer[] { swarmA.AsPeer });
+                await swarmC.BootstrapAsync(new Peer[] { swarmA.AsPeer });
+
+                Assert.Contains(swarmA.AsPeer, swarmB.Peers);
+                Assert.Contains(swarmB.AsPeer, swarmA.Peers);
+            }
+            finally
+            {
+                await swarmA.StopAsync();
+                await swarmB.StopAsync();
+                await swarmC.StopAsync();
+            }
+        }
+
+        [Fact(Timeout = Timeout)]
         public async Task BroadcastWhileMining()
         {
             Swarm<DumbAction> a = _swarms[0];

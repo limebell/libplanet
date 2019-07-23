@@ -418,6 +418,33 @@ namespace Libplanet.Net
             }
         }
 
+        public async Task BootstrapAsync(
+            IEnumerable<Peer> bootstrapPeers,
+            CancellationToken cancellationToken = default(CancellationToken))
+        {
+            if (_protocol is null)
+            {
+                throw new SwarmException("Protocol is not ready");
+            }
+
+            if (cancellationToken == default(CancellationToken))
+            {
+                cancellationToken = _cancellationToken;
+            }
+
+            if (!(bootstrapPeers is null))
+            {
+                try
+                {
+                    await _protocol.BootstrapAsync(bootstrapPeers.ToList(), cancellationToken);
+                }
+                catch (Exception e)
+                {
+                    throw e;
+                }
+            }
+        }
+
         public void BroadcastBlocks(IEnumerable<Block<T>> blocks)
         {
             _logger.Debug("Trying to broadcast blocks...");
