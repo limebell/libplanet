@@ -1759,6 +1759,11 @@ namespace Libplanet.Net
             Message msg = e.Queue.Dequeue();
             NetMQMessage netMQMessage = msg.ToNetMQMessage(_privateKey, AsPeer);
 
+            if (_workerCancellationTokenSource.IsCancellationRequested)
+            {
+                return;
+            }
+
             // FIXME Should replace with PUB/SUB model.
             try
             {
