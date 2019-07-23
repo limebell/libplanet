@@ -852,7 +852,6 @@ namespace Libplanet.Tests.Net
 
             try
             {
-                await StartAsync(seed);
                 await StartAsync(swarmA);
                 await StartAsync(swarmB);
 
@@ -862,8 +861,9 @@ namespace Libplanet.Tests.Net
 
                 await Task.Delay(2000);
 
-                Assert.Contains(swarmA.AsPeer, swarmB.Peers);
-                Assert.Contains(swarmB.AsPeer, swarmA.Peers);
+                Assert.Equal(new[] { swarmA.AsPeer, swarmB.AsPeer }, seed.Peers.ToArray());
+                Assert.Equal(new[] { seed.AsPeer, swarmB.AsPeer }, swarmA.Peers.ToArray());
+                Assert.Equal(new[] { seed.AsPeer, swarmA.AsPeer }, swarmB.Peers.ToArray());
             }
             finally
             {
