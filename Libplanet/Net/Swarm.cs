@@ -586,7 +586,7 @@ namespace Libplanet.Net
             }
             catch (Exception e)
             {
-                _logger.Error(e, "Unexpected exception occurred during SendMessageAsync()");
+                _logger.Error(e, "An unexpected exception occurred during SendMessageAsync()");
                 throw;
             }
         }
@@ -930,6 +930,10 @@ namespace Libplanet.Net
                                 BroadcastTxIds(txIds);
                             }
                         }, cancellationToken);
+                }
+                catch (TaskCanceledException)
+                {
+                    _logger.Debug("Task is cancelled.");
                 }
                 catch (Exception e)
                 {
