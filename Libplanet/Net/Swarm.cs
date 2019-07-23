@@ -578,10 +578,24 @@ namespace Libplanet.Net
                 dealer.Connect(address);
 
                 _logger.Debug($"Trying to send [{message}] to [{address}]...");
-                dealer.SendMultipartMessage(message.ToNetMQMessage(_privateKey, AsPeer));
-                _logger.Debug($"[{message}] sent to [{address}]...");
+                bool sent = dealer.TrySendMultipartMessage(
+                    TimeSpan.FromSeconds(1),
+                    message.ToNetMQMessage(_privateKey, AsPeer));
+
+                if (sent)
+                {
+                    _logger.Debug($"[{message}] sent to [{address}]...");
+                }
+                else
+                {
+                    throw new TimeoutException();
+                }
 
                 _dealers[peer.Address] = dealer;
+            }
+            catch (TimeoutException)
+            {
+                _logger.Debug("Timeout occurred during SendMessageAsync().");
             }
             catch (Exception e)
             {
