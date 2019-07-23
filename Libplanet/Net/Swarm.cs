@@ -787,7 +787,7 @@ namespace Libplanet.Net
                     null,
                     progress,
                     evaluateActions: render,
-                    cancellationToken);
+                    cancellationToken: cancellationToken);
                 if (!synced.Id.Equals(_blockChain.Id))
                 {
                     _blockChain.Swap(synced, render);
