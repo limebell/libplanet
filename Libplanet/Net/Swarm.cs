@@ -578,9 +578,7 @@ namespace Libplanet.Net
                 dealer.Connect(address);
 
                 _logger.Debug($"Trying to send [{message}] to [{address}]...");
-                await dealer.SendMultipartMessageAsync(
-                    message.ToNetMQMessage(_privateKey, AsPeer),
-                    cancellationToken: _cancellationToken);
+                dealer.SendMultipartMessage(message.ToNetMQMessage(_privateKey, AsPeer));
 
                 _dealers[peer.Address] = dealer;
             }
