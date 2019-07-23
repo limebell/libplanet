@@ -212,8 +212,8 @@ namespace Libplanet.Tests.Net
                 await swarmB.BootstrapAsync(new Peer[] { swarmA.AsPeer });
                 await swarmC.BootstrapAsync(new Peer[] { swarmA.AsPeer });
 
-                Assert.Contains(swarmA.AsPeer, swarmB.Peers);
-                Assert.Contains(swarmB.AsPeer, swarmA.Peers);
+                Assert.Contains(swarmB.AsPeer, swarmC.Peers);
+                Assert.Contains(swarmC.AsPeer, swarmB.Peers);
             }
             finally
             {
