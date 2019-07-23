@@ -1337,6 +1337,11 @@ namespace Libplanet.Net
         {
             Message msg = e.Queue.Dequeue();
 
+            if (_workerCancellationTokenSource.IsCancellationRequested)
+            {
+                return;
+            }
+
             // FIXME Should replace with PUB/SUB model.
             try
             {
