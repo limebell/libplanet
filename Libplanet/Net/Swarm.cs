@@ -1160,6 +1160,20 @@ namespace Libplanet.Net
                         break;
                     }
 
+                case FindPeer findPeer:
+                    {
+                        _logger.Debug($"FindPeer received.");
+                        _protocol.ReceiveMessage(this, findPeer);
+                        break;
+                    }
+
+                case Neighbours neighbours:
+                    {
+                        _logger.Debug($"Neighbours received.");
+                        _protocol.ReceiveMessage(this, neighbours);
+                        break;
+                    }
+
                 case GetBlockHashes getBlockHashes:
                     {
                         IEnumerable<HashDigest<SHA256>> hashes =
