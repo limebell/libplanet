@@ -67,6 +67,7 @@ namespace Libplanet.Net
         private CancellationToken _cancellationToken;
         private IPAddress _publicIPAddress;
         private IProtocol _protocol;
+        private IDictionary<Peer, AsyncAutoResetEvent> _expectedPongs;
 
         static Swarm()
         {
@@ -131,6 +132,7 @@ namespace Libplanet.Net
             BlockReceived = new AsyncAutoResetEvent();
             DifferentVersionPeerEncountered = differentVersionPeerEncountered;
 
+            _expectedPongs = new ConcurrentDictionary<Peer, AsyncAutoResetEvent>();
             _dealers = new ConcurrentDictionary<Address, DealerSocket>();
             _router = new RouterSocket();
             _router.Options.RouterHandover = true;
@@ -555,7 +557,8 @@ namespace Libplanet.Net
         }
 
         internal async Task AddPeersAsync(
-            IEnumerable<Peer> peers)
+            IEnumerable<Peer> peers,
+            bool withoutTimeout)
         {
             if (_protocol is null)
             {
@@ -563,10 +566,18 @@ namespace Libplanet.Net
             }
 
             KademliaProtocol<T> kp = (KademliaProtocol<T>)_protocol;
+
+            List<Task> tasks = new List<Task>();
             foreach (Peer peer in peers)
             {
-                await kp.PingAsync(peer);
+                tasks.Add(kp.PingAsync(peer, withoutTimeout: withoutTimeout));
+                _expectedPongs[peer] = new AsyncAutoResetEvent();
+                tasks.Add(_expectedPongs[peer].WaitAsync(_cancellationToken));
             }
+
+            await Task.WhenAll(tasks);
+
+            _expectedPongs.Clear();
         }
 
         internal async Task SendMessageAsync(Peer peer, Message message)
@@ -977,6 +988,11 @@ namespace Libplanet.Net
 
                 case Pong pong:
                     {
+                        if (_expectedPongs.ContainsKey(message.Remote))
+                        {
+                            _expectedPongs[message.Remote].Set();
+                        }
+
                         if (pong.AppProtocolVersion != _appProtocolVersion)
                         {
                             DifferentProtocolVersionEventArgs args =
