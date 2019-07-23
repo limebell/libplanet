@@ -579,6 +579,7 @@ namespace Libplanet.Net
 
                 _logger.Debug($"Trying to send [{message}] to [{address}]...");
                 dealer.SendMultipartMessage(message.ToNetMQMessage(_privateKey, AsPeer));
+                _logger.Debug($"[{message}] sent to [{address}]...");
 
                 _dealers[peer.Address] = dealer;
             }
