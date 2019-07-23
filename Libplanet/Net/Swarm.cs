@@ -1506,7 +1506,10 @@ namespace Libplanet.Net
                 _logger.Debug($"The message[{message}] has parsed.");
 
                 // it's still async because some method it relies are async yet.
-                Task.Run(
+#pragma warning disable CS4014
+                ProcessMessageAsync(message, _cancellationToken);
+#pragma warning restore CS4014
+                /*Task.Run(
                     async () =>
                     {
                         try
@@ -1519,7 +1522,7 @@ namespace Libplanet.Net
                             throw;
                         }
                     },
-                    _cancellationToken);
+                    _cancellationToken);*/
             }
             catch (InvalidMessageException ex)
             {
