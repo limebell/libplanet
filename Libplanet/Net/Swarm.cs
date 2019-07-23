@@ -858,12 +858,13 @@ namespace Libplanet.Net
                 long totalBlockCount = peerIndex - currentTipIndex;
 
                 BlockChain<T> synced = await SyncPreviousBlocksAsync(
+                    blockChain,
                     peer,
                     null,
                     progress,
                     totalBlockCount,
-                    render,
-                    cancellationToken);
+                    evaluateActions: render,
+                    cancellationToken: cancellationToken);
                 if (!synced.Id.Equals(_blockChain.Id))
                 {
                     blockChain.Swap(synced, render);
