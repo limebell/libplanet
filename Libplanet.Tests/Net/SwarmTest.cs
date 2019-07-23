@@ -882,7 +882,7 @@ namespace Libplanet.Tests.Net
                 await swarmB.AddPeersAsync(new[] { seed.AsPeer });
                 await swarmA.AddPeersAsync(new[] { swarmB.AsPeer });
 
-                await Task.Delay(2000);
+                await Task.Delay(3000);
 
                 Assert.Equal(
                     new HashSet<Peer> { swarmA.AsPeer, swarmB.AsPeer },
