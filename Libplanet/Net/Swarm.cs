@@ -1632,13 +1632,11 @@ namespace Libplanet.Net
             // FIXME Should replace with PUB/SUB model.
             try
             {
-                List<Task> tasks = new List<Task>();
-                foreach (DealerSocket dealer in _dealers.Values)
-                {
-                    tasks.Add(dealer.SendMultipartMessageAsync(netMQMessage));
-                }
-
-                Task.WhenAll(tasks);
+                Task.WhenAll(
+                    _dealers.Values.Select(s =>
+                        Task.Run(() => s.SendMultipartMessage(netMQMessage))
+                    )
+                ).Wait();
             }
             catch (TimeoutException ex)
             {
