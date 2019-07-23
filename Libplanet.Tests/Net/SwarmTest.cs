@@ -874,6 +874,7 @@ namespace Libplanet.Tests.Net
 
             try
             {
+                await StartAsync(seed);
                 await StartAsync(swarmA);
                 await StartAsync(swarmB);
 
@@ -883,9 +884,15 @@ namespace Libplanet.Tests.Net
 
                 await Task.Delay(2000);
 
-                Assert.Equal(new[] { swarmA.AsPeer, swarmB.AsPeer }, seed.Peers.ToArray());
-                Assert.Equal(new[] { seed.AsPeer, swarmB.AsPeer }, swarmA.Peers.ToArray());
-                Assert.Equal(new[] { seed.AsPeer, swarmA.AsPeer }, swarmB.Peers.ToArray());
+                Assert.Equal(
+                    new HashSet<Peer> { swarmA.AsPeer, swarmB.AsPeer },
+                    seed.Peers.ToHashSet());
+                Assert.Equal(
+                    new HashSet<Peer> { seed.AsPeer, swarmB.AsPeer },
+                    swarmA.Peers.ToHashSet());
+                Assert.Equal(
+                    new HashSet<Peer> { seed.AsPeer, swarmA.AsPeer },
+                    swarmB.Peers.ToHashSet());
             }
             finally
             {
