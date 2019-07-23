@@ -40,9 +40,6 @@ namespace Libplanet.Net
         private static readonly TimeSpan TurnPermissionLifetime =
             TimeSpan.FromMinutes(5);
 
-        private readonly IDictionary<Peer, DateTimeOffset> _peers;
-        private readonly IDictionary<Peer, DateTimeOffset> _removedPeers;
-
         private readonly BlockChain<T> _blockChain;
         private readonly PrivateKey _privateKey;
         private readonly RouterSocket _router;
@@ -69,6 +66,7 @@ namespace Libplanet.Net
         private CancellationTokenSource _workerCancellationTokenSource;
         private CancellationToken _cancellationToken;
         private IPAddress _publicIPAddress;
+        private IProtocol _protocol;
 
         static Swarm()
         {
@@ -122,8 +120,6 @@ namespace Libplanet.Net
             _blockChain = blockChain ?? throw new ArgumentNullException(nameof(blockChain));
             _privateKey = privateKey ?? throw new ArgumentNullException(nameof(privateKey));
             _dialTimeout = dialTimeout;
-            _peers = new ConcurrentDictionary<Peer, DateTimeOffset>();
-            _removedPeers = new ConcurrentDictionary<Peer, DateTimeOffset>();
             LastSeenTimestamps =
                 new ConcurrentDictionary<Peer, DateTimeOffset>();
 
@@ -248,7 +244,9 @@ namespace Libplanet.Net
             }
         }
 
-        internal ICollection<Peer> Peers => _peers.Keys;
+        internal ICollection<Peer> Peers => _protocol.Peers;
+
+        internal IProtocol Protocol => _protocol;
 
         /// <summary>
         /// Waits until this <see cref="Swarm{T}"/> instance gets started to run.
@@ -257,82 +255,19 @@ namespace Libplanet.Net
         /// property becomes <c>true</c>.</returns>
         public Task WaitForRunningAsync() => _runningEvent.Task;
 
-        public async Task<ISet<Peer>> AddPeersAsync(
-            IEnumerable<Peer> peers,
-            DateTimeOffset? timestamp = null,
-            CancellationToken cancellationToken = default(CancellationToken))
+        public async Task AddPeersAsync(
+            IEnumerable<Peer> peers)
         {
-            if (timestamp is null)
+            if (_protocol is null)
             {
-                timestamp = DateTimeOffset.UtcNow;
+                throw new ArgumentNullException(nameof(_protocol));
             }
 
-            var peersAsArray = peers as Peer[] ?? peers.ToArray();
-            foreach (Peer peer in peersAsArray)
+            KademliaProtocol<T> kp = (KademliaProtocol<T>)_protocol;
+            foreach (Peer peer in peers)
             {
-                if (_removedPeers.ContainsKey(peer))
-                {
-                    _removedPeers.Remove(peer);
-                }
+                await kp.PingAsync(peer);
             }
-
-            PublicKey publicKey = _privateKey.PublicKey;
-            var addedPeers = new HashSet<Peer>();
-
-            foreach (Peer peer in peersAsArray)
-            {
-                if (peer.PublicKey.Equals(publicKey))
-                {
-                    continue;
-                }
-
-                if (!IsUnknownPeer(peer))
-                {
-                    _logger.Debug($"Peer[{peer}] is already exists, ignored.");
-                    continue;
-                }
-
-                if (Running)
-                {
-                    try
-                    {
-                        _logger.Debug($"Trying to DialPeerAsync({peer})...");
-                        Pong pong = await DialPeerAsync(peer, cancellationToken);
-                        _logger.Debug($"DialPeerAsync({peer}) is complete.");
-
-                        Peer peerWithVersion = peer.WithAppProtocolVersion(pong.AppProtocolVersion);
-                        _peers[peerWithVersion] = timestamp.Value;
-                        addedPeers.Add(peerWithVersion);
-                    }
-                    catch (IOException e)
-                    {
-                        _logger.Error(
-                            e,
-                            $"DialPeerAsync({peer}) failed. ignored."
-                        );
-                    }
-                    catch (TimeoutException e)
-                    {
-                        _logger.Error(
-                            e,
-                            $"DialPeerAsync({peer}) failed. ignored."
-                        );
-                    }
-                    catch (DifferentAppProtocolVersionException e)
-                    {
-                        _logger.Error(
-                            e,
-                            $"DialPeerAsync({peer}) failed. ignored."
-                        );
-                    }
-                }
-                else
-                {
-                    _peers[peer] = timestamp.Value;
-                }
-            }
-
-            return addedPeers;
         }
 
         public async Task StopAsync(
@@ -344,8 +279,6 @@ namespace Libplanet.Net
             {
                 if (Running)
                 {
-                    _removedPeers[AsPeer] = DateTimeOffset.UtcNow;
-
                     if (_broadcastQueue.Any() || _replyQueue.Any())
                     {
                         await Task.Delay(_linger, cancellationToken);
@@ -474,8 +407,15 @@ namespace Libplanet.Net
                 using (await _runningMutex.LockAsync())
                 {
                     Running = true;
-                    await PreloadAsync(render: true, cancellationToken: _cancellationToken);
+
+                    // await PreloadAsync(render: true, cancellationToken: _cancellationToken);
                 }
+
+                _protocol = new KademliaProtocol<T>(
+                    this,
+                    _appProtocolVersion,
+                    _cancellationToken,
+                    _logger);
 
                 var tasks = new List<Task>
                 {
@@ -487,7 +427,8 @@ namespace Libplanet.Net
                 {
                     tasks.Add(BindingProxies(_cancellationToken));
                     tasks.Add(RefreshAllocate(_cancellationToken));
-                    tasks.Add(RefreshPermissions(_cancellationToken));
+
+                    // tasks.Add(RefreshPermissions(_cancellationToken));
                 }
 
                 await await Task.WhenAny(tasks);
@@ -578,12 +519,8 @@ namespace Libplanet.Net
 
             Block<T> initialTip = _blockChain.Tip;
 
-            IList<(Peer, long? TipIndex)> peersWithHeight =
-                await DialToExistingPeers(cancellationToken).Select(pp =>
-                    (pp.Item1, pp.Item2.TipIndex)
-                ).ToListAsync(cancellationToken);
-            await SyncBehindsBlocksFromPeersAsync(
-                peersWithHeight,
+            await SyncBehindsBlocksFromPeerAsync(
+                Peers.First(),
                 progress,
                 cancellationToken,
                 render
@@ -598,8 +535,8 @@ namespace Libplanet.Net
 
             var height = _blockChain.Tip.Index;
 
-            IEnumerable<(Peer, HashDigest<SHA256> Hash)> trustedPeersWithTip =
-                peersWithHeight.Where(pair =>
+            /*IEnumerable<(Peer, HashDigest<SHA256> Hash)> trustedPeersWithTip =
+                Peers.Where(pair =>
                     trustedStateValidators.Contains(pair.Item1.Address) &&
                     !(pair.Item2 is null) &&
                     pair.Item2 <= height
@@ -613,9 +550,9 @@ namespace Libplanet.Net
             bool received = await SyncRecentStatesFromTrustedPeersAsync(
                 trustedPeersWithTip.ToImmutableList(),
                 cancellationToken
-            );
+            );*/
 
-            if (!received)
+            if (true)
             {
                 long initHeight = initialTip is null || _blockChain[initialTip.Index] != initialTip
                     ? 0
@@ -634,7 +571,24 @@ namespace Libplanet.Net
 
         internal async Task SendMessageAsync(Peer peer, Message message)
         {
-            await Task.Delay(0);
+            DealerSocket dealer = await CreateDealerSocket(peer);
+            try
+            {
+                string address = ToNetMQAddress(peer);
+                dealer.Connect(address);
+
+                _logger.Debug($"Trying to send [{message}] to [{address}]...");
+                await dealer.SendMultipartMessageAsync(
+                    message.ToNetMQMessage(_privateKey, AsPeer),
+                    cancellationToken: _cancellationToken);
+
+                _dealers[peer.Address] = dealer;
+            }
+            catch (Exception e)
+            {
+                _logger.Error(e, "Unexpected exception occurred during SendMessageAsync()");
+                throw;
+            }
         }
 
         internal async Task<IEnumerable<HashDigest<SHA256>>>
@@ -645,12 +599,6 @@ namespace Libplanet.Net
                 CancellationToken token = default(CancellationToken)
             )
         {
-            if (!_peers.ContainsKey(peer))
-            {
-                throw new PeerNotFoundException(
-                    $"The peer[{peer.Address}] could not be found.");
-            }
-
             var request = new GetBlockHashes(locator, stop);
 
             using (var socket = new DealerSocket(ToNetMQAddress(peer)))
@@ -678,12 +626,6 @@ namespace Libplanet.Net
             Peer peer,
             IEnumerable<HashDigest<SHA256>> blockHashes)
         {
-            if (!_peers.ContainsKey(peer))
-            {
-                throw new PeerNotFoundException(
-                    $"The peer[{peer.Address}] could not be found.");
-            }
-
             return new AsyncEnumerable<Block<T>>(async yield =>
             {
                 CancellationToken yieldToken = yield.CancellationToken;
@@ -734,12 +676,6 @@ namespace Libplanet.Net
             IEnumerable<TxId> txIds,
             CancellationToken cancellationToken = default(CancellationToken))
         {
-            if (!_peers.ContainsKey(peer))
-            {
-                throw new PeerNotFoundException(
-                    $"The peer[{peer.Address}] could not be found.");
-            }
-
             return new AsyncEnumerable<Transaction<T>>(async yield =>
             {
                 using (var socket = new DealerSocket(ToNetMQAddress(peer)))
@@ -838,67 +774,20 @@ namespace Libplanet.Net
             }
         }
 
-        private IAsyncEnumerable<(Peer, Pong)> DialToExistingPeers(
-            CancellationToken cancellationToken)
-        {
-            return new AsyncEnumerable<(Peer, Pong)>(async yield =>
-            {
-                foreach (Peer peer in _peers.Keys)
-                {
-                    try
-                    {
-                        await yield.ReturnAsync(
-                            (peer, await DialPeerAsync(peer, cancellationToken))
-                        );
-                    }
-                    catch (TimeoutException e)
-                    {
-                        _logger.Error(
-                            e,
-                            $"TimeoutException occured ({peer})."
-                        );
-                    }
-                    catch (IOException e)
-                    {
-                        _logger.Error(
-                            e,
-                            $"IOException occured ({peer})."
-                        );
-                    }
-                    catch (DifferentAppProtocolVersionException e)
-                    {
-                        _logger.Error(
-                            e,
-                            $"Protocol Version is different ({peer}).");
-                    }
-                }
-            });
-        }
-
-        private async Task SyncBehindsBlocksFromPeersAsync(
-            IEnumerable<(Peer, long?)> peersWithHeight,
+        private async Task SyncBehindsBlocksFromPeerAsync(
+            Peer peer,
             IProgress<BlockDownloadState> progress,
             CancellationToken cancellationToken,
-            bool render
-        )
+            bool render)
         {
-            // Implement it directly with AggregateAsync()
-            // because there is no IAsyncEnumerable<T>.MaxAsync().
-            (Peer, long?)? longestPeerWithLength = peersWithHeight.Aggregate(
-                default((Peer, long?)?),
-                (p, c) => p?.Item2 > c.Item2 ? p : c
-            );
-
-            if (longestPeerWithLength != null &&
-                !(_blockChain.Tip?.Index >= longestPeerWithLength?.Item2))
+            if (peer != null)
             {
                 BlockChain<T> synced = await SyncPreviousBlocksAsync(
-                    longestPeerWithLength?.Item1,
+                    peer,
                     null,
                     progress,
                     evaluateActions: render,
-                    cancellationToken: cancellationToken
-                );
+                    cancellationToken);
                 if (!synced.Id.Equals(_blockChain.Id))
                 {
                     _blockChain.Swap(synced, render);
@@ -1015,7 +904,7 @@ namespace Libplanet.Net
             {
                 await Task.Delay(lifetime - TimeSpan.FromMinutes(1));
                 await Task.WhenAll(
-                    _peers.Keys.Select(CreatePermission));
+                    Peers.Select(CreatePermission));
             }
         }
 
@@ -1065,14 +954,31 @@ namespace Libplanet.Net
                 case Ping ping:
                     {
                         _logger.Debug($"Ping received.");
-                        var reply = new Pong(
-                            _appProtocolVersion,
-                            _blockChain.Tip?.Index)
+                        _protocol.ReceiveMessage(this, ping);
+                        break;
+                    }
+
+                case Pong pong:
+                    {
+                        if (pong.AppProtocolVersion != _appProtocolVersion)
                         {
-                            Identity = ping.Identity,
-                        };
-                        _replyQueue.Enqueue(reply);
-                        _logger.Debug($"Pong was queued.");
+                            DifferentProtocolVersionEventArgs args =
+                                new DifferentProtocolVersionEventArgs
+                                {
+                                    ExpectedVersion = _appProtocolVersion,
+                                    ActualVersion = pong.AppProtocolVersion,
+                                };
+
+                            DifferentVersionPeerEncountered?.Invoke(this, args);
+
+                            throw new DifferentAppProtocolVersionException(
+                                $"Peer protocol version is different.",
+                                _appProtocolVersion,
+                                pong.AppProtocolVersion);
+                        }
+
+                        _logger.Debug($"Pong received.");
+                        _protocol.ReceiveMessage(this, pong);
                         break;
                     }
 
@@ -1136,7 +1042,7 @@ namespace Libplanet.Net
                     "BlockHashes doesn't have sender address.");
             }
 
-            Peer peer = _peers.Keys.FirstOrDefault(p => p.Address.Equals(from));
+            Peer peer = Peers.FirstOrDefault(p => p.Address.Equals(from));
             if (peer == null)
             {
                 _logger.Information(
@@ -1427,7 +1333,7 @@ namespace Libplanet.Net
                     "TxIds doesn't have sender address.");
             }
 
-            Peer peer = _peers.Keys.FirstOrDefault(p => p.Address.Equals(from));
+            Peer peer = Peers.FirstOrDefault(p => p.Address.Equals(from));
             if (peer == null)
             {
                 _logger.Information(
@@ -1531,7 +1437,7 @@ namespace Libplanet.Net
 
         private bool IsUnknownPeer(Peer sender)
         {
-            Peer existing = _peers.Keys
+            Peer existing = Peers
                 .FirstOrDefault(p => sender.PublicKey.Equals(p.PublicKey));
 
             if (existing is null)
@@ -1542,7 +1448,7 @@ namespace Libplanet.Net
             if (!existing.EndPoint.Equals(sender.EndPoint))
             {
                 // Clear outdated existing peer.
-                _peers.Remove(existing);
+                Peers.Remove(existing);
                 CloseDealer(existing);
 
                 return true;
@@ -1566,39 +1472,7 @@ namespace Libplanet.Net
             }
         }
 
-        private async Task<Pong> DialAsync(
-            string address,
-            DealerSocket dealer,
-            CancellationToken cancellationToken
-        )
-        {
-            dealer.Connect(address);
-
-            _logger.Debug($"Trying to Ping to [{address}]...");
-            var ping = new Ping();
-            await dealer.SendMultipartMessageAsync(
-                ping.ToNetMQMessage(_privateKey, AsPeer),
-                cancellationToken: cancellationToken);
-
-            _logger.Debug($"Waiting for Pong from [{address}]...");
-            NetMQMessage message = await dealer.ReceiveMultipartMessageAsync(
-                timeout: _dialTimeout,
-                cancellationToken: cancellationToken);
-
-            Message parsedMessage = Message.Parse(message, true);
-            if (parsedMessage is Pong pong)
-            {
-                _logger.Debug($"Pong received.");
-                return pong;
-            }
-
-            throw new InvalidMessageException(
-                $"The response of Ping isn't Pong. " +
-                $"but {parsedMessage}");
-        }
-
-        private async Task<Pong> DialPeerAsync(
-            Peer peer, CancellationToken cancellationToken)
+        private async Task<DealerSocket> CreateDealerSocket(Peer peer)
         {
             if (_turnClient != null)
             {
@@ -1614,49 +1488,7 @@ namespace Libplanet.Net
 
             dealer = new DealerSocket();
             dealer.Options.Identity = Address.ToByteArray();
-
-            try
-            {
-                _logger.Debug($"Trying to DialAsync({peer.EndPoint})...");
-                Pong pong = await DialAsync(
-                    ToNetMQAddress(peer),
-                    dealer,
-                    cancellationToken);
-                _logger.Debug($"DialAsync({peer.EndPoint}) is complete.");
-
-                if (pong.AppProtocolVersion != _appProtocolVersion)
-                {
-                    dealer.Dispose();
-
-                    DifferentProtocolVersionEventArgs args =
-                        new DifferentProtocolVersionEventArgs
-                        {
-                            ExpectedVersion = _appProtocolVersion,
-                            ActualVersion = pong.AppProtocolVersion,
-                        };
-
-                    DifferentVersionPeerEncountered?.Invoke(this, args);
-
-                    throw new DifferentAppProtocolVersionException(
-                        $"Peer protocol version is different.",
-                        _appProtocolVersion,
-                        pong.AppProtocolVersion);
-                }
-
-                _dealers[peer.Address] = dealer;
-
-                return pong;
-            }
-            catch (IOException)
-            {
-                dealer.Dispose();
-                throw;
-            }
-            catch (TimeoutException)
-            {
-                dealer.Dispose();
-                throw;
-            }
+            return dealer;
         }
 
         private void ReceiveMessage(object sender, NetMQSocketEventArgs e)
