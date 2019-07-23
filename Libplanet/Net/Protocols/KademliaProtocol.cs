@@ -292,12 +292,13 @@ namespace Libplanet.Net.Protocols
             return ByteUtil.Hex(echoed) + peer.PublicKey.ToAddress().ToString();
         }
 
-#pragma warning disable
+#pragma warning disable SA1202 // Elements should be ordered by access
         internal async Task PingAsync(Peer target, Peer replacement = null, bool bootstrap = false)
+#pragma warning restore SA1202 // Elements should be ordered by access
         {
             if (target is null)
             {
-                throw new ArgumentNullException(nameof(target));
+                return;
             }
 
             byte[] echo = new SHA256CryptoServiceProvider()
@@ -319,7 +320,6 @@ namespace Libplanet.Net.Protocols
                 _logger.Debug($"Pong of echo ({echo}) is received before setting the timeout.");
             }
         }
-#pragma warning restore
 
         private async Task DoFindPeerAsync(Address target, Peer viaPeer = null)
         {
