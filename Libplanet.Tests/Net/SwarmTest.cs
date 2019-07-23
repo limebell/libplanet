@@ -447,9 +447,8 @@ namespace Libplanet.Tests.Net
             }
             finally
             {
-                await Task.WhenAll(
-                    swarmA.StopAsync(),
-                    swarmB.StopAsync());
+                await swarmA.StopAsync();
+                await swarmB.StopAsync();
             }
         }
 
@@ -511,9 +510,8 @@ namespace Libplanet.Tests.Net
             }
             finally
             {
-                await Task.WhenAll(
-                    swarmA.StopAsync(),
-                    swarmB.StopAsync());
+                await swarmA.StopAsync();
+                await swarmB.StopAsync();
             }
         }
 
@@ -551,9 +549,8 @@ namespace Libplanet.Tests.Net
             }
             finally
             {
-                await Task.WhenAll(
-                    swarmA.StopAsync(),
-                    swarmB.StopAsync());
+                await swarmA.StopAsync();
+                await swarmB.StopAsync();
             }
         }
 
@@ -598,10 +595,9 @@ namespace Libplanet.Tests.Net
             }
             finally
             {
-                await Task.WhenAll(
-                    swarmA.StopAsync(),
-                    swarmB.StopAsync(),
-                    swarmC.StopAsync());
+                await swarmA.StopAsync();
+                await swarmB.StopAsync();
+                await swarmC.StopAsync();
             }
         }
 
@@ -684,10 +680,9 @@ namespace Libplanet.Tests.Net
             }
             finally
             {
-                await Task.WhenAll(
-                    swarmA.StopAsync(),
-                    swarmB.StopAsync(),
-                    swarmC.StopAsync());
+                await swarmA.StopAsync();
+                await swarmB.StopAsync();
+                await swarmC.StopAsync();
             }
         }
 
@@ -750,10 +745,9 @@ namespace Libplanet.Tests.Net
             }
             finally
             {
-                await Task.WhenAll(
-                    swarmA.StopAsync(),
-                    swarmB.StopAsync(),
-                    swarmC.StopAsync());
+                await swarmA.StopAsync();
+                await swarmB.StopAsync();
+                await swarmC.StopAsync();
             }
         }
 
@@ -880,10 +874,9 @@ namespace Libplanet.Tests.Net
             }
             finally
             {
-                await Task.WhenAll(
-                    seed.StopAsync(),
-                    swarmA.StopAsync(),
-                    swarmB.StopAsync());
+                await seed.StopAsync();
+                await swarmA.StopAsync();
+                await swarmB.StopAsync();
             }
         }
 
@@ -914,6 +907,7 @@ namespace Libplanet.Tests.Net
             finally
             {
                 await minerSwarm.StopAsync();
+                await receiverSwarm.StopAsync();
             }
         }
 
@@ -964,9 +958,8 @@ namespace Libplanet.Tests.Net
             }
             finally
             {
-                await Task.WhenAll(
-                    minerSwarm.StopAsync(),
-                    receiverSwarm.StopAsync());
+                await minerSwarm.StopAsync();
+                await receiverSwarm.StopAsync();
             }
         }
 
@@ -1081,6 +1074,8 @@ namespace Libplanet.Tests.Net
             finally
             {
                 await minerSwarm.StopAsync();
+                await receiverSwarm.StopAsync();
+
                 DumbAction.RenderRecords.Value = ImmutableList<RenderRecord>.Empty;
                 MinerReward.RenderRecords.Value = ImmutableList<RenderRecord>.Empty;
             }
