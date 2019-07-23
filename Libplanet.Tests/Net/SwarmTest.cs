@@ -95,7 +95,10 @@ namespace Libplanet.Tests.Net
 
             foreach (Swarm<DumbAction> s in _swarms)
             {
-                s.StopAsync().Wait(DisposeTimeout);
+                if (s.Running)
+                {
+                    s.StopAsync().Wait(DisposeTimeout);
+                }
             }
 
             NetMQConfig.Cleanup(false);
