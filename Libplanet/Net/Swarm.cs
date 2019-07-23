@@ -255,21 +255,6 @@ namespace Libplanet.Net
         /// property becomes <c>true</c>.</returns>
         public Task WaitForRunningAsync() => _runningEvent.Task;
 
-        public async Task AddPeersAsync(
-            IEnumerable<Peer> peers)
-        {
-            if (_protocol is null)
-            {
-                throw new ArgumentNullException(nameof(_protocol));
-            }
-
-            KademliaProtocol<T> kp = (KademliaProtocol<T>)_protocol;
-            foreach (Peer peer in peers)
-            {
-                await kp.PingAsync(peer);
-            }
-        }
-
         public async Task StopAsync(
             CancellationToken cancellationToken = default(CancellationToken))
         {
@@ -566,6 +551,21 @@ namespace Libplanet.Net
 
                     _blockChain.ExecuteActions(block, render: false);
                 }
+            }
+        }
+
+        internal async Task AddPeersAsync(
+            IEnumerable<Peer> peers)
+        {
+            if (_protocol is null)
+            {
+                throw new ArgumentNullException(nameof(_protocol));
+            }
+
+            KademliaProtocol<T> kp = (KademliaProtocol<T>)_protocol;
+            foreach (Peer peer in peers)
+            {
+                await kp.PingAsync(peer);
             }
         }
 
