@@ -565,19 +565,31 @@ namespace Libplanet.Net
                 throw new ArgumentNullException(nameof(_protocol));
             }
 
-            KademliaProtocol<T> kp = (KademliaProtocol<T>)_protocol;
-
-            List<Task> tasks = new List<Task>();
-            foreach (Peer peer in peers)
+            try
             {
-                tasks.Add(kp.PingAsync(peer, withoutTimeout: withoutTimeout));
-                _expectedPongs[peer] = new AsyncAutoResetEvent();
-                tasks.Add(_expectedPongs[peer].WaitAsync(_cancellationToken));
+                KademliaProtocol<T> kp = (KademliaProtocol<T>)_protocol;
+
+                List<Task> tasks = new List<Task>();
+                foreach (Peer peer in peers)
+                {
+                    tasks.Add(kp.PingAsync(peer, withoutTimeout: withoutTimeout));
+                    _expectedPongs[peer] = new AsyncAutoResetEvent();
+                    tasks.Add(_expectedPongs[peer].WaitAsync(_cancellationToken));
+                }
+
+                await Task.WhenAll(tasks);
+
+                _expectedPongs.Clear();
             }
-
-            await Task.WhenAll(tasks);
-
-            _expectedPongs.Clear();
+            catch (TaskCanceledException)
+            {
+                _logger.Debug("Task is cancelled during AddPeersAsync().");
+            }
+            catch (Exception e)
+            {
+                _logger.Error(e, "Unexpected exception occurred during AddPeersAsync().");
+                throw;
+            }
         }
 
         internal async Task SendMessageAsync(Peer peer, Message message)
@@ -988,11 +1000,6 @@ namespace Libplanet.Net
 
                 case Pong pong:
                     {
-                        if (_expectedPongs.ContainsKey(message.Remote))
-                        {
-                            _expectedPongs[message.Remote].Set();
-                        }
-
                         if (pong.AppProtocolVersion != _appProtocolVersion)
                         {
                             DifferentProtocolVersionEventArgs args =
@@ -1003,6 +1010,10 @@ namespace Libplanet.Net
                                 };
 
                             DifferentVersionPeerEncountered?.Invoke(this, args);
+                            if (_expectedPongs.ContainsKey(message.Remote))
+                            {
+                                _expectedPongs[message.Remote].Set();
+                            }
 
                             throw new DifferentAppProtocolVersionException(
                                 $"Peer protocol version is different.",
@@ -1012,6 +1023,12 @@ namespace Libplanet.Net
 
                         _logger.Debug($"Pong received.");
                         _protocol.ReceiveMessage(this, pong);
+
+                        if (_expectedPongs.ContainsKey(message.Remote))
+                        {
+                            _expectedPongs[message.Remote].Set();
+                        }
+
                         break;
                     }
 
