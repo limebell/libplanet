@@ -202,11 +202,8 @@ namespace Libplanet.Net
                 EndPoint,
                 _appProtocolVersion,
                 _publicIPAddress)
-            : null;
-
-        // FIXME : this exception throwing should be returned.
-            /*throw new SwarmException(
-                "Can't translate unbound Swarm to Peer.");*/
+            : throw new SwarmException(
+                "Can't translate unbound Swarm to Peer.");
 
         public AsyncAutoResetEvent TxReceived { get; }
 
