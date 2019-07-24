@@ -731,6 +731,63 @@ namespace Libplanet.Tests.Net
         }
 
         [Fact(Timeout = Timeout)]
+        public async Task BroadcastTxAsyncMany()
+        {
+            int size = 8;
+
+            var policy = new BlockPolicy<DumbAction>();
+            FileStoreFixture[] fxs = new FileStoreFixture[size];
+            BlockChain<DumbAction>[] blockchains = new BlockChain<DumbAction>[size];
+            Swarm<DumbAction>[] swarms = new Swarm<DumbAction>[size];
+
+            for (int i = 0; i < size; i++)
+            {
+                fxs[i] = new FileStoreFixture();
+                blockchains[i] = new BlockChain<DumbAction>(policy, fxs[i].Store);
+                swarms[i] = new Swarm<DumbAction>(
+                    blockchains[i],
+                    new PrivateKey(),
+                    appProtocolVersion: 1,
+                    host: IPAddress.Loopback.ToString());
+            }
+
+            Transaction<DumbAction> tx = Transaction<DumbAction>.Create(
+                0,
+                new PrivateKey(),
+                new DumbAction[] { }
+            );
+
+            blockchains[0].StageTransactions(
+                new Dictionary<Transaction<DumbAction>, bool> { { tx, true } });
+
+            try
+            {
+                await StartAsync(swarms[0]);
+                for (int i = 1; i < size; i++)
+                {
+                    await StartAsync(swarms[i]);
+                    await swarms[i].AddPeersAsync(new[] { swarms[0].AsPeer });
+                }
+
+                await Task.WhenAll(swarms.Skip(1).Select(s =>
+                    s.TxReceived.WaitAsync()));
+
+                for (int i = 0; i < size; i++)
+                {
+                    Assert.Equal(tx, blockchains[i].Transactions[tx.Id]);
+                }
+            }
+            finally
+            {
+                for (int i = 0; i < size; i++)
+                {
+                    await swarms[i].StopAsync();
+                    fxs[i].Dispose();
+                }
+            }
+        }
+
+        [Fact(Timeout = Timeout)]
         public async Task CanBroadcastBlock()
         {
             Swarm<DumbAction> swarmA = _swarms[0];
