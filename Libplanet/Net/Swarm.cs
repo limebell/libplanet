@@ -709,6 +709,8 @@ namespace Libplanet.Net
                 dealer.Connect(address);
 
                 _logger.Debug($"Trying to send [{message}] to [{address}]...");
+
+                /*
                 bool sent = dealer.TrySendMultipartMessage(
                     TimeSpan.FromSeconds(1),
                     message.ToNetMQMessage(_privateKey, AsPeer));
@@ -720,18 +722,18 @@ namespace Libplanet.Net
                 else
                 {
                     throw new TimeoutException();
-                }
+                }*/
+
+                dealer.SendMultipartMessage(message.ToNetMQMessage(_privateKey, AsPeer));
 
                 _dealers[peer.Address] = dealer;
             }
             catch (TimeoutException)
             {
-                dealer.Dispose();
                 _logger.Debug("Timeout occurred during SendMessageAsync().");
             }
             catch (Exception e)
             {
-                dealer.Dispose();
                 _logger.Error(e, "An unexpected exception occurred during SendMessageAsync()");
                 throw;
             }
@@ -1761,15 +1763,9 @@ namespace Libplanet.Net
             // FIXME Should replace with PUB/SUB model.
             try
             {
-                // FIXME The current timeout value(1 sec) is arbitrary.
-                // We should make this configurable or fix it to an unneeded structure.
-                _dealers.Values.ParallelForEachAsync(async s =>
-                {
-                    await Task.Run(() =>
-                    {
-                        s.TrySendMultipartMessage(TimeSpan.FromSeconds(1), netMQMessage);
-                    });
-                });
+                Task.WhenAll(
+                    Peers.Select(peer =>
+                        SendMessageAsync(peer, msg)));
             }
             catch (TimeoutException ex)
             {
@@ -1789,6 +1785,11 @@ namespace Libplanet.Net
         private void DoReply(object sender, NetMQQueueEventArgs<Message> e)
         {
             Message msg = e.Queue.Dequeue();
+            if (_workerCancellationTokenSource.IsCancellationRequested)
+            {
+                return;
+            }
+
             _logger.Debug($"Reply {msg} to {ByteUtil.Hex(msg.Identity)}...");
             NetMQMessage netMQMessage = msg.ToNetMQMessage(_privateKey, AsPeer);
 
