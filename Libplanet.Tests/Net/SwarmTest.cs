@@ -805,7 +805,7 @@ namespace Libplanet.Tests.Net
             await Task.WhenAll(a.StopAsync(), t);
         }
 
-        /*[Fact(Timeout = Timeout)]
+        [Fact(Timeout = Timeout)]
         public async Task AsPeerThrowSwarmExceptionWhenUnbound()
         {
             Swarm<DumbAction> swarm = new Swarm<DumbAction>(
@@ -818,7 +818,7 @@ namespace Libplanet.Tests.Net
 
             await StartAsync(swarm);
             Assert.Equal(swarm.EndPoint, swarm.AsPeer.EndPoint);
-        }*/
+        }
 
         [Trait("RequireTurnServer", "true")]
         [FactOnlyTurnAvailable(Timeout = Timeout)]
