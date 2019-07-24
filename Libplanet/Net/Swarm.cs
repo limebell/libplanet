@@ -464,7 +464,7 @@ namespace Libplanet.Net
                 Address,
                 blocks.Select(b => b.Hash)
             );
-            _broadcastQueue.Enqueue(message);
+            BroadcastMessage(message);
             _logger.Debug("Block broadcasting complete.");
         }
 
@@ -618,6 +618,11 @@ namespace Libplanet.Net
 
         internal async Task SendMessageAsync(Peer peer, Message message)
         {
+            if (_cancellationToken.IsCancellationRequested)
+            {
+                return;
+            }
+
             DealerSocket dealer = await CreateDealerSocket(peer);
             try
             {
@@ -775,29 +780,9 @@ namespace Libplanet.Net
             });
         }
 
-        private static IEnumerable<Peer> FilterPeers(
-            IDictionary<Peer, DateTimeOffset> peers,
-            DateTimeOffset before,
-            DateTimeOffset? after = null,
-            bool remove = false)
+        private void BroadcastMessage(Message message)
         {
-            foreach (KeyValuePair<Peer, DateTimeOffset> kv in peers.ToList())
-            {
-                if (after != null && kv.Value <= after)
-                {
-                    continue;
-                }
-
-                if (kv.Value <= before)
-                {
-                    if (remove)
-                    {
-                        peers.Remove(kv.Key);
-                    }
-
-                    yield return kv.Key;
-                }
-            }
+            _broadcastQueue.Enqueue(message);
         }
 
         private async Task BindingProxies(CancellationToken cancellationToken)
@@ -1008,7 +993,7 @@ namespace Libplanet.Net
         private void BroadcastTxIds(IEnumerable<TxId> txIds)
         {
             var message = new TxIds(Address, txIds);
-            _broadcastQueue.Enqueue(message);
+            BroadcastMessage(message);
         }
 
         private async Task ProcessMessageAsync(
