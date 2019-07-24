@@ -501,6 +501,18 @@ namespace Libplanet.Net
             );
         }
 
+        internal string TraceTable()
+        {
+            if (_protocol is null)
+            {
+                return string.Empty;
+            }
+            else
+            {
+                return _protocol.Trace();
+            }
+        }
+
         internal async Task PreloadAsync(
             bool render,
             IProgress<PreloadState> progress = null,

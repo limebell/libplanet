@@ -20,5 +20,7 @@ namespace Libplanet.Net.Protocols
         void ReceiveMessage(object sender, Message message);
 
         void Timeout(object senter, Peer peer);
+
+        string Trace();
     }
 }
