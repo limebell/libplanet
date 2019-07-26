@@ -1763,11 +1763,13 @@ namespace Libplanet.Net
                 {
                     if (Peers.Select(peer => peer.Address).Contains(pair.Key))
                     {
-                        tasks.Add(Task.Run(() => pair.Value.SendMultipartMessage(netMQMessage)));
+                        pair.Value.SendMultipartMessage(netMQMessage);
+                        /*tasks.Add(
+                            Task.Run(() => pair.Value.SendMultipartMessage(netMQMessage)));*/
                     }
                 }
 
-                Task.WhenAll(tasks).Wait();
+                /*Task.WhenAll(tasks).Wait();*/
             }
             catch (TimeoutException ex)
             {
