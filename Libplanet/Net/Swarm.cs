@@ -1638,9 +1638,20 @@ namespace Libplanet.Net
                         Task.Run(() => s.SendMultipartMessage(netMQMessage))
                     )
                 ).Wait();*/
-                Task.WhenAll(
+                /*Task.WhenAll(
                     Peers.Select(peer =>
-                        SendMessageAsync(peer, msg)));
+                        SendMessageAsync(peer, msg))).Wait();*/
+
+                List<Task> tasks = new List<Task>();
+                foreach (var pair in _dealers)
+                {
+                    if (Peers.Select(peer => peer.Address).Contains(pair.Key))
+                    {
+                        tasks.Add(Task.Run(() => pair.Value.SendMultipartMessage(netMQMessage)));
+                    }
+                }
+
+                Task.WhenAll(tasks).Wait();
             }
             catch (TimeoutException ex)
             {
