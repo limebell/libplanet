@@ -730,12 +730,21 @@ namespace Libplanet.Tests.Net
 
             try
             {
-                await StartAsync(swarms[0]);
-                for (int i = 1; i < size; i++)
+                for (int i = 0; i < size; i++)
                 {
                     await StartAsync(swarms[i]);
-                    await swarms[i].BootstrapAsync(new[] { swarms[0].AsPeer });
                 }
+
+                List<Task> tasks = new List<Task>();
+                for (int i = 1; i < size; i++)
+                {
+                    await swarms[i].BootstrapAsync(new[] { swarms[0].AsPeer });
+                    tasks.Add(swarms[i].TxReceived.WaitAsync());
+                }
+
+                await Task.WhenAll(tasks);
+
+                Log.Debug(swarms[0].TraceTable());
 
                 for (int i = 0; i < size; i++)
                 {
