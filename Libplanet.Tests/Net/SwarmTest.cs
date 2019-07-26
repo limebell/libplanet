@@ -38,6 +38,11 @@ namespace Libplanet.Tests.Net
         private readonly List<BlockChain<DumbAction>> _blockchains;
         private readonly List<Swarm<DumbAction>> _swarms;
 
+        static SwarmTest()
+        {
+            NetMQConfig.MaxSockets = 1048576;
+        }
+
         public SwarmTest(ITestOutputHelper output)
         {
             const string outputTemplate =
@@ -723,10 +728,7 @@ namespace Libplanet.Tests.Net
                 {
                     await StartAsync(swarms[i]);
                     await swarms[i].BootstrapAsync(new[] { swarms[0].AsPeer });
-                    await Task.Delay(1000);
                 }
-
-                Log.Debug(swarms[0].TraceTable());
 
                 for (int i = 0; i < size; i++)
                 {
