@@ -1717,6 +1717,7 @@ namespace Libplanet.Net
                     Peers.Select(peer =>
                         SendMessageAsync(peer, msg))).Wait();*/
 
+                _logger.Debug($"Broadcasting message [{msg}]");
                 List<Task> tasks = new List<Task>();
                 foreach (var pair in _dealers)
                 {
@@ -1727,6 +1728,8 @@ namespace Libplanet.Net
                             Task.Run(() => pair.Value.SendMultipartMessage(netMQMessage)));*/
                     }
                 }
+
+                _logger.Debug($"[{msg}] broadcasting completed.");
 
                 /*Task.WhenAll(tasks).Wait();*/
             }
@@ -1741,8 +1744,6 @@ namespace Libplanet.Net
                     "An unexpected exception occured during DoBroadcast()"
                 );
             }
-
-            _logger.Debug($"broadcasted: {msg}");
         }
 
         private void DoReply(object sender, NetMQQueueEventArgs<Message> e)
