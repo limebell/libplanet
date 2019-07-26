@@ -1202,17 +1202,11 @@ namespace Libplanet.Net
             BlockHashes message,
             CancellationToken cancellationToken = default(CancellationToken))
         {
-            if (!(message.Sender is Address from))
-            {
-                throw new NullReferenceException(
-                    "BlockHashes doesn't have sender address.");
-            }
-
-            Peer peer = Peers.FirstOrDefault(p => p.Address.Equals(from));
+            Peer peer = message.Remote;
             if (peer == null)
             {
                 _logger.Information(
-                    "BlockHashes was sent from unknown peer. ignored.");
+                    $"BlockHashes was sent from unknown peer [{peer.Address.ToHex()}]. ignored.");
                 return;
             }
 
@@ -1496,13 +1490,7 @@ namespace Libplanet.Net
                 return;
             }
 
-            if (!(message.Sender is Address from))
-            {
-                throw new NullReferenceException(
-                    "TxIds doesn't have sender address.");
-            }
-
-            Peer peer = Peers.FirstOrDefault(p => p.Address.Equals(from));
+            Peer peer = message.Remote;
             if (peer == null)
             {
                 _logger.Information(
@@ -1674,20 +1662,6 @@ namespace Libplanet.Net
 #pragma warning disable CS4014
                 ProcessMessageAsync(message, _cancellationToken);
 #pragma warning restore CS4014
-                /*Task.Run(
-                    async () =>
-                    {
-                        try
-                        {
-                            await ProcessMessageAsync(message, _cancellationToken);
-                        }
-                        catch (Exception exc)
-                        {
-                            _logger.Error("Something went wrong during message parsing: {0}", exc);
-                            throw;
-                        }
-                    },
-                    _cancellationToken);*/
             }
             catch (InvalidMessageException ex)
             {
@@ -1719,13 +1693,13 @@ namespace Libplanet.Net
 
                 _logger.Debug($"Broadcasting message [{msg}]");
                 List<Task> tasks = new List<Task>();
-                foreach (var pair in _dealers)
+                _logger.Debug($"Peers to broadcast : {_protocol.PeersToBroadcast.Count}");
+                foreach (Peer peer in _protocol.PeersToBroadcast)
                 {
-                    if (_protocol.PeersToBroadcast.Select(peer => peer.Address).Contains(pair.Key))
+                    if (_dealers.ContainsKey(peer.Address))
                     {
-                        pair.Value.SendMultipartMessage(netMQMessage);
-                        /*tasks.Add(
-                            Task.Run(() => pair.Value.SendMultipartMessage(netMQMessage)));*/
+                        _logger.Debug($"Broadcastring to.. [{peer.Address.ToHex()}]");
+                        _dealers[peer.Address].SendMultipartMessage(netMQMessage);
                     }
                 }
 
