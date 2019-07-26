@@ -1625,11 +1625,6 @@ namespace Libplanet.Net
             Message msg = e.Queue.Dequeue();
             NetMQMessage netMQMessage = msg.ToNetMQMessage(_privateKey, AsPeer);
 
-            if (_workerCancellationTokenSource.IsCancellationRequested)
-            {
-                return;
-            }
-
             // FIXME Should replace with PUB/SUB model.
             try
             {
@@ -1671,10 +1666,6 @@ namespace Libplanet.Net
         private void DoReply(object sender, NetMQQueueEventArgs<Message> e)
         {
             Message msg = e.Queue.Dequeue();
-            if (_workerCancellationTokenSource.IsCancellationRequested)
-            {
-                return;
-            }
 
             _logger.Debug($"Reply {msg} to {ByteUtil.Hex(msg.Identity)}...");
             NetMQMessage netMQMessage = msg.ToNetMQMessage(_privateKey, AsPeer);
