@@ -1072,7 +1072,7 @@ namespace Libplanet.Net
                 }
                 catch (TaskCanceledException)
                 {
-                    _logger.Debug("Task is cancelled during BroadcastTxAsync().");
+                    _logger.Debug("Task is cancelled during BroadcastMessageAsync().");
                 }
                 catch (Exception e)
                 {
@@ -1104,7 +1104,7 @@ namespace Libplanet.Net
                 }
                 catch (TaskCanceledException)
                 {
-                    _logger.Debug("Task is cancelled during BroadcastTxAsync().");
+                    _logger.Debug("Task is cancelled during ReceiveMessageAsync().");
                 }
                 catch (Exception e)
                 {
@@ -1137,7 +1137,7 @@ namespace Libplanet.Net
                 }
                 catch (TaskCanceledException)
                 {
-                    _logger.Debug("Task is cancelled during BroadcastTxAsync().");
+                    _logger.Debug("Task is cancelled during ReplyMessageAsync().");
                 }
                 catch (Exception e)
                 {
