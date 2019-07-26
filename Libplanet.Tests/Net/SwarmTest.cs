@@ -725,7 +725,7 @@ namespace Libplanet.Tests.Net
                 new DumbAction[] { }
             );
 
-            blockchains[0].StageTransactions(
+            blockchains[size - 1].StageTransactions(
                 new Dictionary<Transaction<DumbAction>, bool> { { tx, true } });
 
             try
@@ -739,12 +739,16 @@ namespace Libplanet.Tests.Net
                 for (int i = 1; i < size; i++)
                 {
                     await swarms[i].BootstrapAsync(new[] { swarms[0].AsPeer });
+                }
+
+                for (int i = 0; i < size - 1; i++)
+                {
                     tasks.Add(swarms[i].TxReceived.WaitAsync());
                 }
 
                 await Task.WhenAll(tasks);
 
-                Log.Debug(swarms[0].TraceTable());
+                Log.Debug(swarms[size - 1].TraceTable());
 
                 for (int i = 0; i < size; i++)
                 {
@@ -799,12 +803,13 @@ namespace Libplanet.Tests.Net
                 await swarmB.AddPeersAsync(new[] { swarmC.AsPeer }, true);
                 await swarmC.AddPeersAsync(new[] { swarmA.AsPeer }, true);
 
+                Log.Debug(swarmA.TraceTable());
+                Log.Debug(swarmB.TraceTable());
+                Log.Debug(swarmC.TraceTable());
+
                 swarmB.BroadcastBlocks(new[] { chainB.Last() });
 
-                await swarmC.BlockReceived.WaitAsync();
-                await swarmA.BlockReceived.WaitAsync();
-
-                Assert.Equal(chainB.AsEnumerable(), chainC);
+                await Task.Delay(1000);
 
                 // chainB doesn't applied to chainA since chainB is shorter
                 // than chainA
@@ -812,8 +817,11 @@ namespace Libplanet.Tests.Net
 
                 swarmA.BroadcastBlocks(new[] { chainA.Last() });
 
-                await swarmB.BlockReceived.WaitAsync();
-                await swarmC.BlockReceived.WaitAsync();
+                await Task.WhenAll(
+                    swarmB.BlockReceived.WaitAsync(),
+                    swarmC.BlockReceived.WaitAsync());
+
+                await Task.Delay(3000);
 
                 Assert.Equal(chainA.AsEnumerable(), chainB);
                 Assert.Equal(chainA.AsEnumerable(), chainC);
