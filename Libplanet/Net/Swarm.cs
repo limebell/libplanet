@@ -635,31 +635,23 @@ namespace Libplanet.Net
                 return;
             }
 
-            DealerSocket dealer = await CreateDealerSocket(peer);
-            try
+            DealerSocket dealer;
+            if (_dealers.Keys.Contains(peer.Address))
             {
+                dealer = _dealers[peer.Address];
+            }
+            else
+            {
+                dealer = await CreateDealerSocket(peer);
                 string address = ToNetMQAddress(peer);
                 dealer.Connect(address);
+            }
 
-                _logger.Debug($"Trying to send [{message}] to [{address}]...");
-
-                /*
-                bool sent = dealer.TrySendMultipartMessage(
-                    TimeSpan.FromSeconds(1),
-                    message.ToNetMQMessage(_privateKey, AsPeer));
-
-                if (sent)
-                {
-                    _logger.Debug($"[{message}] sent to [{address}]...");
-                }
-                else
-                {
-                    throw new TimeoutException();
-                }*/
+            try
+            {
+                _logger.Debug($"Trying to send [{message}] to [{peer.Address.ToHex()}]...");
 
                 dealer.SendMultipartMessage(message.ToNetMQMessage(_privateKey, AsPeer));
-
-                _dealers[peer.Address] = dealer;
             }
             catch (TimeoutException)
             {
@@ -1576,7 +1568,7 @@ namespace Libplanet.Net
             }
 
             dealer = new DealerSocket();
-            dealer.Options.Identity = Address.ToByteArray();
+            _dealers[peer.Address] = dealer;
             return dealer;
         }
 
