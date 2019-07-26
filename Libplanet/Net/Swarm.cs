@@ -1386,6 +1386,9 @@ namespace Libplanet.Net
                     _blockChain.Swap(previousBlocks, render: true);
                     _logger.Debug("Swapping complete");
                 }
+
+                Message msg = new BlockHashes(peer.Address, blocks.Select(b => b.Hash));
+                BroadcastMessage(msg);
             }
             else
             {
@@ -1717,7 +1720,7 @@ namespace Libplanet.Net
                 List<Task> tasks = new List<Task>();
                 foreach (var pair in _dealers)
                 {
-                    if (Peers.Select(peer => peer.Address).Contains(pair.Key))
+                    if (_protocol.PeersToBroadcast.Select(peer => peer.Address).Contains(pair.Key))
                     {
                         pair.Value.SendMultipartMessage(netMQMessage);
                         /*tasks.Add(
