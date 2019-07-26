@@ -378,9 +378,9 @@ namespace Libplanet.Net
                 var tasks = new List<Task>
                 {
                     BroadcastMessageAsync(broadcastTxInterval, _cancellationToken),
-                    ReceiveMessageAsync(TimeSpan.FromMilliseconds(100), _cancellationToken),
-                    ReplyMessageAsync(TimeSpan.FromMilliseconds(100), _cancellationToken),
-                    BroadcastTxAsync(TimeSpan.FromMilliseconds(100), _cancellationToken),
+                    ReceiveMessageAsync(TimeSpan.FromMilliseconds(20), _cancellationToken),
+                    ReplyMessageAsync(TimeSpan.FromMilliseconds(20), _cancellationToken),
+                    BroadcastTxAsync(TimeSpan.FromMilliseconds(20), _cancellationToken),
                 };
 
                 if (behindNAT)
@@ -490,10 +490,6 @@ namespace Libplanet.Net
             if (Running)
             {
                 _broadcastQueue.Enqueue(message);
-            }
-            else
-            {
-                throw new SwarmException("Swarm stopped... cannot broadcast message.");
             }
         }
 
@@ -1441,7 +1437,7 @@ namespace Libplanet.Net
                 _logger.Debug($"Broadcasting message [{msg}]");
                 Task.WhenAll(
                     _protocol.PeersToBroadcast.Select(s =>
-                        Task.Run(() => SendMessageAsync(s, msg))
+                         SendMessageAsync(s, msg)
                     )
                 ).Wait();
             }
