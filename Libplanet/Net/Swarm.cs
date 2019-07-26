@@ -60,7 +60,6 @@ namespace Libplanet.Net
 
         private readonly NetMQQueue<Message> _replyQueue;
         private readonly NetMQQueue<Message> _broadcastQueue;
-        private readonly NetMQPoller _poller;
 
         private readonly ILogger _logger;
 
@@ -144,7 +143,6 @@ namespace Libplanet.Net
             _router.Options.RouterHandover = true;
             _replyQueue = new NetMQQueue<Message>();
             _broadcastQueue = new NetMQQueue<Message>();
-            _poller = new NetMQPoller { _router, _replyQueue, _broadcastQueue };
 
             _blockSyncMutex = new AsyncLock();
             _runningMutex = new AsyncLock();
@@ -171,10 +169,6 @@ namespace Libplanet.Net
             string loggerId = _privateKey.PublicKey.ToAddress().ToHex();
             _logger = Log.ForContext<Swarm<T>>()
                 .ForContext("SwarmId", loggerId);
-
-            _router.ReceiveReady += ReceiveMessage;
-            _replyQueue.ReceiveReady += DoReply;
-            _broadcastQueue.ReceiveReady += DoBroadcast;
         }
 
         ~Swarm()
@@ -269,19 +263,10 @@ namespace Libplanet.Net
                         await Task.Delay(_linger, cancellationToken);
                     }
 
-                    _broadcastQueue.ReceiveReady -= DoBroadcast;
-                    _replyQueue.ReceiveReady -= DoReply;
-                    _router.ReceiveReady -= ReceiveMessage;
-
                     if (_protocol != null)
                     {
                         MessageReceived -= _protocol.ReceiveMessage;
                         MessageTimeouted -= _protocol.Timeout;
-                    }
-
-                    if (_poller.IsRunning)
-                    {
-                        _poller.Dispose();
                     }
 
                     _broadcastQueue.Dispose();
@@ -392,8 +377,10 @@ namespace Libplanet.Net
 
                 var tasks = new List<Task>
                 {
-                    BroadcastTxAsync(broadcastTxInterval, _cancellationToken),
-                    Task.Run(() => _poller.Run(), _cancellationToken),
+                    BroadcastMessageAsync(broadcastTxInterval, _cancellationToken),
+                    ReceiveMessageAsync(TimeSpan.FromMilliseconds(100), _cancellationToken),
+                    ReplyMessageAsync(TimeSpan.FromMilliseconds(100), _cancellationToken),
+                    BroadcastTxAsync(TimeSpan.FromMilliseconds(100), _cancellationToken),
                 };
 
                 if (behindNAT)
@@ -835,6 +822,109 @@ namespace Libplanet.Net
                 await Task.Delay(lifetime - TimeSpan.FromMinutes(1), cancellationToken);
                 await Task.WhenAll(
                     Peers.Select(CreatePermission));
+            }
+        }
+
+        private async Task BroadcastMessageAsync(
+            TimeSpan broadcastTxInterval,
+            CancellationToken cancellationToken)
+        {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                try
+                {
+                    await Task.Delay(broadcastTxInterval, cancellationToken);
+
+                    await Task.Run(
+                        () =>
+                        {
+                            if (_broadcastQueue.Any())
+                            {
+                                NetMQQueueEventArgs<Message> args =
+                                    new NetMQQueueEventArgs<Message>(_broadcastQueue);
+
+                                DoBroadcast(this, args);
+                            }
+                        }, cancellationToken);
+                }
+                catch (TaskCanceledException)
+                {
+                    _logger.Debug("Task is cancelled during BroadcastMessageAsync().");
+                }
+                catch (Exception e)
+                {
+                    _logger.Error(
+                        e,
+                        "An unexpected exception occured during BroadcastMessageAsync()");
+                    throw;
+                }
+            }
+        }
+
+        private async Task ReceiveMessageAsync(
+            TimeSpan broadcastTxInterval,
+            CancellationToken cancellationToken)
+        {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                try
+                {
+                    await Task.Delay(broadcastTxInterval, cancellationToken);
+
+                    await Task.Run(
+                        () =>
+                        {
+                            if (_router.HasIn)
+                            {
+                                NetMQSocketEventArgs args = new NetMQSocketEventArgs(_router);
+                                ReceiveMessage(this, args);
+                            }
+                        }, cancellationToken);
+                }
+                catch (TaskCanceledException)
+                {
+                    _logger.Debug("Task is cancelled during ReceiveMessageAsync().");
+                }
+                catch (Exception e)
+                {
+                    _logger.Error(
+                        e,
+                        "An unexpected exception occured during ReceiveMessageAsync()");
+                    throw;
+                }
+            }
+        }
+
+        private async Task ReplyMessageAsync(
+            TimeSpan broadcastTxInterval,
+            CancellationToken cancellationToken)
+        {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                try
+                {
+                    await Task.Delay(broadcastTxInterval, cancellationToken);
+
+                    await Task.Run(
+                        () =>
+                        {
+                            if (_replyQueue.Any())
+                            {
+                                NetMQQueueEventArgs<Message> args =
+                                    new NetMQQueueEventArgs<Message>(_replyQueue);
+                                DoReply(this, args);
+                            }
+                        }, cancellationToken);
+                }
+                catch (TaskCanceledException)
+                {
+                    _logger.Debug("Task is cancelled during ReplyMessageAsync().");
+                }
+                catch (Exception e)
+                {
+                    _logger.Error(e, "An unexpected exception occured during ReplyMessageAsync()");
+                    throw;
+                }
             }
         }
 
