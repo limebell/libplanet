@@ -1763,9 +1763,16 @@ namespace Libplanet.Net
             // FIXME Should replace with PUB/SUB model.
             try
             {
-                Task.WhenAll(
-                    Peers.Select(peer =>
-                        SendMessageAsync(peer, msg)));
+                List<Task> tasks = new List<Task>();
+                foreach (var pair in _dealers)
+                {
+                    if (Peers.Select(peer => peer.Address).Contains(pair.Key))
+                    {
+                        tasks.Add(Task.Run(() => pair.Value.SendMultipartMessage(netMQMessage)));
+                    }
+                }
+
+                Task.WhenAll(tasks).Wait();
             }
             catch (TimeoutException ex)
             {

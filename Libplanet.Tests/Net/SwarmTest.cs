@@ -735,10 +735,7 @@ namespace Libplanet.Tests.Net
                 {
                     await StartAsync(swarms[i]);
                     await swarms[i].BootstrapAsync(new[] { swarms[0].AsPeer });
-                    await Task.Delay(1000);
                 }
-
-                Log.Debug(swarms[0].TraceTable());
 
                 for (int i = 0; i < size; i++)
                 {
