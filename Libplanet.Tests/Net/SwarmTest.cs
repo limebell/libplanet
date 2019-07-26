@@ -792,12 +792,13 @@ namespace Libplanet.Tests.Net
                 await swarmB.AddPeersAsync(new[] { swarmC.AsPeer }, true);
                 await swarmC.AddPeersAsync(new[] { swarmA.AsPeer }, true);
 
+                Log.Debug(swarmA.TraceTable());
+                Log.Debug(swarmB.TraceTable());
+                Log.Debug(swarmC.TraceTable());
+
                 swarmB.BroadcastBlocks(new[] { chainB.Last() });
 
-                await swarmC.BlockReceived.WaitAsync();
-                await swarmA.BlockReceived.WaitAsync();
-
-                Assert.Equal(chainB.AsEnumerable(), chainC);
+                await Task.Delay(1000);
 
                 // chainB doesn't applied to chainA since chainB is shorter
                 // than chainA
@@ -805,8 +806,11 @@ namespace Libplanet.Tests.Net
 
                 swarmA.BroadcastBlocks(new[] { chainA.Last() });
 
-                await swarmB.BlockReceived.WaitAsync();
-                await swarmC.BlockReceived.WaitAsync();
+                await Task.WhenAll(
+                    swarmB.BlockReceived.WaitAsync(),
+                    swarmC.BlockReceived.WaitAsync());
+
+                await Task.Delay(3000);
 
                 Assert.Equal(chainA.AsEnumerable(), chainB);
                 Assert.Equal(chainA.AsEnumerable(), chainC);
