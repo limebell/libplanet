@@ -438,10 +438,6 @@ namespace Libplanet.Tests.Net
                 });
             }
 
-            var minerCanceller = new CancellationTokenSource();
-            Task miningA = CreateMiner(swarmA, chainA, 5000, minerCanceller.Token);
-            Task miningB = CreateMiner(swarmB, chainB, 8000, minerCanceller.Token);
-
             try
             {
                 await StartAsync(swarmA);
@@ -449,6 +445,11 @@ namespace Libplanet.Tests.Net
 
                 KademliaProtocol<DumbAction> kp = (KademliaProtocol<DumbAction>)swarmA._protocol;
                 await kp.PingAsync(swarmB.AsPeer);
+                await Task.Delay(1000);
+
+                var minerCanceller = new CancellationTokenSource();
+                Task miningA = CreateMiner(swarmA, chainA, 5000, minerCanceller.Token);
+                Task miningB = CreateMiner(swarmB, chainB, 8000, minerCanceller.Token);
 
                 await Task.Delay(10000);
                 minerCanceller.Cancel();
