@@ -277,6 +277,11 @@ namespace Libplanet.Net
                         _poller.Dispose();
                     }
 
+                    while (_poller.IsRunning)
+                    {
+                        await Task.Delay(100);
+                    }
+
                     _broadcastQueue.Dispose();
                     _replyQueue.Dispose();
                     _router.Dispose();
