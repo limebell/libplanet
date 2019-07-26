@@ -718,7 +718,7 @@ namespace Libplanet.Tests.Net
                 new DumbAction[] { }
             );
 
-            blockchains[0].StageTransactions(
+            blockchains[size - 1].StageTransactions(
                 new Dictionary<Transaction<DumbAction>, bool> { { tx, true } });
 
             try
@@ -732,12 +732,16 @@ namespace Libplanet.Tests.Net
                 for (int i = 1; i < size; i++)
                 {
                     await swarms[i].BootstrapAsync(new[] { swarms[0].AsPeer });
+                }
+
+                for (int i = 0; i < size - 1; i++)
+                {
                     tasks.Add(swarms[i].TxReceived.WaitAsync());
                 }
 
                 await Task.WhenAll(tasks);
 
-                Log.Debug(swarms[0].TraceTable());
+                Log.Debug(swarms[size - 1].TraceTable());
 
                 for (int i = 0; i < size; i++)
                 {

@@ -388,10 +388,10 @@ namespace Libplanet.Net
 
                 var tasks = new List<Task>
                 {
-                    BroadcastMessageAsync(broadcastTxInterval, _cancellationToken),
-                    ReceiveMessageAsync(TimeSpan.FromMilliseconds(100), _cancellationToken),
-                    ReplyMessageAsync(TimeSpan.FromMilliseconds(100), _cancellationToken),
-                    BroadcastTxAsync(TimeSpan.FromMilliseconds(100), _cancellationToken),
+                    BroadcastMessageAsync(TimeSpan.FromMilliseconds(30), _cancellationToken),
+                    ReceiveMessageAsync(TimeSpan.FromMilliseconds(30), _cancellationToken),
+                    ReplyMessageAsync(TimeSpan.FromMilliseconds(30), _cancellationToken),
+                    BroadcastTxAsync(broadcastTxInterval, _cancellationToken),
                 };
 
                 if (behindNAT)
