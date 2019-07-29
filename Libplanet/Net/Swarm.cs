@@ -665,8 +665,11 @@ namespace Libplanet.Net
                 foreach (Peer peer in peers)
                 {
                     tasks.Add(kp.PingAsync(peer, withoutTimeout: withoutTimeout));
-                    _expectedPongs[peer] = new AsyncAutoResetEvent();
-                    tasks.Add(_expectedPongs[peer].WaitAsync(_cancellationToken));
+                    if (withoutTimeout)
+                    {
+                        _expectedPongs[peer] = new AsyncAutoResetEvent();
+                        tasks.Add(_expectedPongs[peer].WaitAsync(_cancellationToken));
+                    }
                 }
 
                 await Task.WhenAll(tasks);

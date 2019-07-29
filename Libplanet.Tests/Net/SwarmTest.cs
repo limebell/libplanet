@@ -203,6 +203,58 @@ namespace Libplanet.Tests.Net
         }
 
         [Fact(Timeout = Timeout)]
+        public async Task PingToClosedPeer()
+        {
+            Swarm<DumbAction> swarmA = new Swarm<DumbAction>(
+                    _blockchains[0],
+                    new PrivateKey(),
+                    appProtocolVersion: 1,
+                    host: IPAddress.Loopback.ToString());
+            Swarm<DumbAction> swarmB = new Swarm<DumbAction>(
+                    _blockchains[1],
+                    new PrivateKey(),
+                    appProtocolVersion: 1,
+                    host: IPAddress.Loopback.ToString());
+            Swarm<DumbAction> swarmC = new Swarm<DumbAction>(
+                    _blockchains[2],
+                    new PrivateKey(),
+                    appProtocolVersion: 1,
+                    host: IPAddress.Loopback.ToString());
+
+            try
+            {
+                await StartAsync(swarmA);
+                await StartAsync(swarmB);
+                await StartAsync(swarmC);
+
+                Peer peer = swarmC.AsPeer;
+                await swarmA.AddPeersAsync(new[] { swarmB.AsPeer, peer }, true);
+
+                Assert.Contains(swarmB.AsPeer, swarmA.Peers);
+                Assert.Contains(peer, swarmA.Peers);
+
+                await swarmC.StopAsync();
+                await Task.Delay(3000);
+                await swarmA.AddPeersAsync(new[] { peer }, false);
+                await Task.Delay(3000);
+                await swarmA.AddPeersAsync(new[] { swarmB.AsPeer }, false);
+                await Task.Delay(3000);
+
+                Assert.Contains(swarmB.AsPeer, swarmA.Peers);
+                Assert.DoesNotContain(peer, swarmA.Peers);
+            }
+            finally
+            {
+                await swarmA.StopAsync();
+                await swarmB.StopAsync();
+                if (swarmC.Running)
+                {
+                    await swarmC.StopAsync();
+                }
+            }
+        }
+
+        [Fact(Timeout = Timeout)]
         public async Task BootstrapAsync()
         {
             Swarm<DumbAction> swarmA = _swarms[0];
