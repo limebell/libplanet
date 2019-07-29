@@ -379,14 +379,14 @@ namespace Libplanet.Net
                 {
                     Running = true;
 
-                    // await PreloadAsync(render: true, cancellationToken: _cancellationToken);
-                }
+                    _protocol = new KademliaProtocol<T>(
+                        this,
+                        _appProtocolVersion,
+                        _cancellationToken,
+                        _logger);
 
-                _protocol = new KademliaProtocol<T>(
-                    this,
-                    _appProtocolVersion,
-                    _cancellationToken,
-                    _logger);
+                    await PreloadAsync(render: true, cancellationToken: _cancellationToken);
+                }
 
                 var tasks = new List<Task>
                 {
@@ -551,9 +551,7 @@ namespace Libplanet.Net
 
             IEnumerable<(Peer, HashDigest<SHA256> Hash)> trustedPeersWithTip =
                 peersWithHeight.Where(pair =>
-                    trustedStateValidators.Contains(pair.Item1.Address) &&
-                    !(pair.Item2 is null) &&
-                    pair.Item2 <= height
+                    trustedStateValidators.Contains(pair.Item1.Address)
                 ).OrderByDescending(pair =>
                     pair.Item2
                 ).Select(pair =>
@@ -640,6 +638,12 @@ namespace Libplanet.Net
 
             try
             {
+                if (message is Pong pong)
+                {
+                    pong.TipIndex = _blockChain.Tip?.Index;
+                    message = pong;
+                }
+
                 _logger.Debug($"Trying to send [{message}] to [{peer.Address.ToHex()}]...");
 
                 dealer.SendMultipartMessage(message.ToNetMQMessage(_privateKey, AsPeer));
