@@ -48,6 +48,7 @@ namespace Libplanet.Net
         private readonly PrivateKey _privateKey;
         private readonly RouterSocket _router;
         private readonly IDictionary<Address, DealerSocket> _dealers;
+        private readonly IDictionary<Address, long?> _tips;
         private readonly int _appProtocolVersion;
 
         private readonly TimeSpan _dialTimeout;
@@ -136,6 +137,7 @@ namespace Libplanet.Net
 
             _expectedPongs = new ConcurrentDictionary<Peer, AsyncAutoResetEvent>();
             _dealers = new ConcurrentDictionary<Address, DealerSocket>();
+            _tips = new ConcurrentDictionary<Address, long?>();
             _router = new RouterSocket();
             _router.Options.RouterHandover = true;
             _replyQueue = new NetMQQueue<Message>();
@@ -514,18 +516,16 @@ namespace Libplanet.Net
                 trustedStateValidators = ImmutableHashSet<Address>.Empty;
             }
 
-            IList<(Peer, long? TipIndex)> peersWithHeight =
-                await DialToExistingPeers(cancellationToken).Select(pp =>
-                    (pp.Item1, pp.Item2.TipIndex)
-                ).ToListAsync(cancellationToken);
+            Block<T> initialTip = _blockChain.Tip;
+
+            IList<(Peer, long?)> peersWithHeight =
+                Peers.Select(p => (p, _tips[p.Address])).ToList();
 
             if (!peersWithHeight.Any())
             {
                 _logger.Information("There is no appropriate peer for preloading.");
                 return;
             }
-
-            Block<T> initialTip = _blockChain.Tip;
 
             // As preloading takes long, the blockchain data can corrupt if a program suddenly
             // terminates during preloading is going on.  In order to make preloading done
@@ -705,6 +705,12 @@ namespace Libplanet.Net
 
             try
             {
+                if (message is Pong pong)
+                {
+                    pong.TipIndex = _blockChain.Tip?.Index;
+                    message = pong;
+                }
+
                 _logger.Debug($"Trying to send [{message}] to [{peer.Address.ToHex()}]...");
 
                 dealer.SendMultipartMessage(message.ToNetMQMessage(_privateKey, AsPeer));
@@ -891,14 +897,18 @@ namespace Libplanet.Net
             Peer peer,
             IProgress<BlockDownloadState> progress,
             CancellationToken cancellationToken,
-            bool render)
+            bool render
+        )
         {
-            if (peer != null)
+            if (peer != null &&
+                !(_blockChain.Tip?.Index >= (_tips[peer.Address] ?? -1)))
             {
                 long currentTipIndex = blockChain.Tip?.Index ?? -1;
-                long peerIndex = longestPeerWithLength?.Item2 ?? -1;
+                long peerIndex = _tips[peer.Address] ?? -1;
                 long totalBlockCount = peerIndex - currentTipIndex;
 
+                _logger.Debug("Synchronizing previous blocks from " +
+                    $"[{peer.Address.ToHex()}]");
                 BlockChain<T> synced = await SyncPreviousBlocksAsync(
                     blockChain,
                     peer,
@@ -906,7 +916,8 @@ namespace Libplanet.Net
                     progress,
                     totalBlockCount,
                     evaluateActions: render,
-                    cancellationToken: cancellationToken);
+                    cancellationToken: cancellationToken
+                );
                 if (!synced.Id.Equals(_blockChain.Id))
                 {
                     blockChain.Swap(synced, render);
@@ -1216,9 +1227,9 @@ namespace Libplanet.Net
                                 };
 
                             DifferentVersionPeerEncountered?.Invoke(this, args);
-                            if (_expectedPongs.ContainsKey(message.Remote))
+                            if (_expectedPongs.ContainsKey(pong.Remote))
                             {
-                                _expectedPongs[message.Remote].Set();
+                                _expectedPongs[pong.Remote].Set();
                             }
 
                             throw new DifferentAppProtocolVersionException(
@@ -1228,6 +1239,8 @@ namespace Libplanet.Net
                         }
 
                         _logger.Debug($"Pong received.");
+                        _tips[pong.Remote.Address] = pong.TipIndex;
+
                         _protocol.ReceiveMessage(this, pong);
 
                         if (_expectedPongs.ContainsKey(message.Remote))
