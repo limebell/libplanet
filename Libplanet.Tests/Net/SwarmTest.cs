@@ -1044,7 +1044,7 @@ namespace Libplanet.Tests.Net
         }
 
         [Theory(Timeout = Timeout)]
-        /*[InlineData(true)]*/
+        [InlineData(true)]
         [InlineData(false)]
         public async Task PreloadWithTrustedPeers(bool trust)
         {

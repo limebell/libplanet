@@ -44,6 +44,7 @@ namespace Libplanet.Net
         private readonly PrivateKey _privateKey;
         private readonly RouterSocket _router;
         private readonly IDictionary<Address, DealerSocket> _dealers;
+        private readonly IDictionary<Address, long?> _tips;
         private readonly int _appProtocolVersion;
 
         private readonly TimeSpan _dialTimeout;
@@ -133,6 +134,7 @@ namespace Libplanet.Net
 
             _expectedPongs = new ConcurrentDictionary<Peer, AsyncAutoResetEvent>();
             _dealers = new ConcurrentDictionary<Address, DealerSocket>();
+            _tips = new ConcurrentDictionary<Address, long?>();
             _router = new RouterSocket();
             _router.Options.RouterHandover = true;
             _replyQueue = new NetMQQueue<Message>();
@@ -528,8 +530,11 @@ namespace Libplanet.Net
 
             Block<T> initialTip = _blockChain.Tip;
 
-            await SyncBehindsBlocksFromPeerAsync(
-                Peers.First(),
+            IList<(Peer, long?)> peersWithHeight =
+                Peers.Select(p => (p, _tips[p.Address])).ToList();
+
+            await SyncBehindsBlocksFromPeersAsync(
+                peersWithHeight,
                 progress,
                 cancellationToken,
                 render
@@ -544,8 +549,8 @@ namespace Libplanet.Net
 
             var height = _blockChain.Tip.Index;
 
-            /*IEnumerable<(Peer, HashDigest<SHA256> Hash)> trustedPeersWithTip =
-                Peers.Where(pair =>
+            IEnumerable<(Peer, HashDigest<SHA256> Hash)> trustedPeersWithTip =
+                peersWithHeight.Where(pair =>
                     trustedStateValidators.Contains(pair.Item1.Address) &&
                     !(pair.Item2 is null) &&
                     pair.Item2 <= height
@@ -559,9 +564,9 @@ namespace Libplanet.Net
             bool received = await SyncRecentStatesFromTrustedPeersAsync(
                 trustedPeersWithTip.ToImmutableList(),
                 cancellationToken
-            );*/
+            );
 
-            if (true)
+            if (!received)
             {
                 long initHeight = initialTip is null || _blockChain[initialTip.Index] != initialTip
                     ? 0
@@ -813,20 +818,37 @@ namespace Libplanet.Net
             }
         }
 
-        private async Task SyncBehindsBlocksFromPeerAsync(
-            Peer peer,
+        private async Task SyncBehindsBlocksFromPeersAsync(
+            IEnumerable<(Peer, long?)> peersWithHeight,
             IProgress<BlockDownloadState> progress,
             CancellationToken cancellationToken,
-            bool render)
+            bool render
+        )
         {
-            if (peer != null)
+            // Implement it directly with AggregateAsync()
+            // because there is no IAsyncEnumerable<T>.MaxAsync().
+            (Peer, long?)? longestPeerWithLength = peersWithHeight.Aggregate(
+                default((Peer, long?)?),
+                (p, c) => p?.Item2 > c.Item2 ? p : c
+            );
+
+            _logger.Debug(
+                "Starts to find a peer to request blocks (candidates: {0} peers).",
+                peersWithHeight.Count()
+            );
+
+            if (longestPeerWithLength != null &&
+                !(_blockChain.Tip?.Index >= longestPeerWithLength?.Item2))
             {
+                _logger.Debug("Synchronizing previous blocks from " +
+                    $"[{longestPeerWithLength.Value.Item1.Address.ToHex()}]");
                 BlockChain<T> synced = await SyncPreviousBlocksAsync(
-                    peer,
+                    longestPeerWithLength?.Item1,
                     null,
                     progress,
                     evaluateActions: render,
-                    cancellationToken: cancellationToken);
+                    cancellationToken: cancellationToken
+                );
                 if (!synced.Id.Equals(_blockChain.Id))
                 {
                     _blockChain.Swap(synced, render);
@@ -1112,9 +1134,9 @@ namespace Libplanet.Net
                                 };
 
                             DifferentVersionPeerEncountered?.Invoke(this, args);
-                            if (_expectedPongs.ContainsKey(message.Remote))
+                            if (_expectedPongs.ContainsKey(pong.Remote))
                             {
-                                _expectedPongs[message.Remote].Set();
+                                _expectedPongs[pong.Remote].Set();
                             }
 
                             throw new DifferentAppProtocolVersionException(
@@ -1124,6 +1146,8 @@ namespace Libplanet.Net
                         }
 
                         _logger.Debug($"Pong received.");
+                        _tips[pong.Remote.Address] = pong.TipIndex;
+
                         _protocol.ReceiveMessage(this, pong);
 
                         if (_expectedPongs.ContainsKey(message.Remote))
