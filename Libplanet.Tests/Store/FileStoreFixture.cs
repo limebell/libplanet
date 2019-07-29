@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Threading;
 using Libplanet.Store;
 using Serilog;
 
@@ -29,6 +30,8 @@ namespace Libplanet.Tests.Store
                 {
                     Log.Debug("IOException occurred during dispose()");
                 }
+
+                Thread.Sleep(0);
             }
         }
     }
