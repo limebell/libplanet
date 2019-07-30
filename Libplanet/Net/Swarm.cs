@@ -377,13 +377,13 @@ namespace Libplanet.Net
 
                 using (await _runningMutex.LockAsync())
                 {
-                    Running = true;
-
                     _protocol = new KademliaProtocol<T>(
                         this,
                         _appProtocolVersion,
                         _cancellationToken,
                         _logger);
+
+                    Running = true;
 
                     // await PreloadAsync(render: true, cancellationToken: _cancellationToken);
                 }
