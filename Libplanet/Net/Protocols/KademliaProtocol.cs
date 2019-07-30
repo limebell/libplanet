@@ -104,13 +104,15 @@ namespace Libplanet.Net.Protocols
                 }
 
                 // Guarantees at least one connection (seed peer)
-                await PingAsync(bootstrapPeer, withoutTimeout: true, bootstrap: true);
+                await PingAsync(bootstrapPeer, withoutTimeout: false, bootstrap: true);
             }
 
             // Should think of the way if bootstraping is done,
             // in order to get closest peer for preloading in swarm
             await Task.WhenAll(
-                _bootstrapCompleted.WaitAsync(cancellationToken),
+                await Task.WhenAny(
+                    _bootstrapCompleted.WaitAsync(cancellationToken),
+                    Task.Delay((int)RequestTimeout, cancellationToken)),
                 Task.Delay((int)RequestTimeout, cancellationToken));
         }
 
