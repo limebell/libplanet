@@ -861,7 +861,7 @@ namespace Libplanet.Tests.Net
 
                 swarmB.BroadcastBlocks(new[] { chainB.Last() });
 
-                await Task.Delay(1000);
+                await Task.Delay(5000);
 
                 // chainB doesn't applied to chainA since chainB is shorter
                 // than chainA
@@ -869,11 +869,7 @@ namespace Libplanet.Tests.Net
 
                 swarmA.BroadcastBlocks(new[] { chainA.Last() });
 
-                await Task.WhenAll(
-                    swarmB.BlockReceived.WaitAsync(),
-                    swarmC.BlockReceived.WaitAsync());
-
-                await Task.Delay(3000);
+                await Task.Delay(10000);
 
                 Assert.Equal(chainA.AsEnumerable(), chainB);
                 Assert.Equal(chainA.AsEnumerable(), chainC);
