@@ -11,6 +11,13 @@ To be released.
  -  `StoreExtension.LookupStateReference<T>()` method became to return
     `Tuple<HashDigest<SHA256>, long>` which is a nullable tuple of `Block<T>.Hash`
     and `Block<T>.Index`.  [[#350]]
+    
+ - `Swarm<T>.AddPeersAsync()` method became internal method. To connect with
+    seed peers, use `Swarm<T>.BootstrapAsync()` method instead. [[#353]]
+
+- `Swarm<T>.PreloadAsync()` is not automatically called at `Swarm<T>.StartAsync()`
+  anymore. The method should be called manually after `Swarm<T>.StartAsync()` and `Swarm<T>.BootstrapAsync()`. [[#353]]
+
  -  Added `IBlockPolicy<T>.BlockAction` property.  [[#319], [#367]]
  -  Removed the type parameter of `ActionEvaluation`.  [[#319], [#367]]
  -  `ActionEvaluation.Action` became to `IAction` type.  [[#319], [#367]]
@@ -26,8 +33,13 @@ To be released.
     a feasible user interface so that they can decide whom to trust
     for themselves.
     [[#272], [#343]]
+    
+ - Added `Swarm<T>.BootstrapAsync()` method to connect with seed peers. The method
+    should be called after `Swarm<T>.StartAsync()`.  [[#353]]
+
  -  Added `StoreExtension.ListAllStateReferences(this IStore, string)` extension
     method.  [[#363]]
+    
  -  `Address` class became to implement `IComparable<Address>` and
     `IComparable` interfaces.  [[#363]]
 
@@ -35,11 +47,24 @@ To be released.
 
  -  `BlockChain<T>.PreloadAsync()` method became to omit rendering of
     `IAction`s in the preloaded behind blocks.  [[#272], [#343]]
+    
  -  `Swarm<T>` became to have two more message types: `GetRecentStates` (`0x0b`)
     and `RecentStates` (`0x0c`).  [[#272], [#343]]
+    
+ -  `Swarm<T>.StartAsync()` does not call `Swarm<T>.PreloadAsync()` anymore. [[#353]]
+    
+ - Peers now connected via Kademlia protocol. Peers are now selectively connected to
+    each peer. [[#353]]
+
+- TxIds and Blocks are now broadcasted to selected peers from routing table of the host
+  peer. [[#353]]
+
+- `NetMQPoller` is not used anymore. [[#353]]
+
  -  `BlockChain<T>.MineBlock()` and `BlockChain<T>.GetNextTxNonce()` methods
     became to ignore transactions that didn't follow `Transaction<T>.Nonce`
     sequentially and treat them as pendings.  [[#365]]
+    
  - `BlockChain<T>` became to evaluate `IBlockPolicy<T>.BlockAction` and set the
    state when a block is appended to the chain.  [[#319], [#367]]
 
@@ -54,6 +79,7 @@ To be released.
 [#319]: https://github.com/planetarium/libplanet/issues/319
 [#343]: https://github.com/planetarium/libplanet/pull/343
 [#350]: https://github.com/planetarium/libplanet/pull/350
+[#353]: https://github.com/planetarium/libplanet/pull/353
 [#363]: https://github.com/planetarium/libplanet/pull/363
 [#365]: https://github.com/planetarium/libplanet/pull/365
 [#366]: https://github.com/planetarium/libplanet/pull/366
