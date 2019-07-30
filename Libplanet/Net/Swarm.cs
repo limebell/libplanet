@@ -385,7 +385,7 @@ namespace Libplanet.Net
                         _cancellationToken,
                         _logger);
 
-                    await PreloadAsync(render: true, cancellationToken: _cancellationToken);
+                    // await PreloadAsync(render: true, cancellationToken: _cancellationToken);
                 }
 
                 var tasks = new List<Task>
