@@ -295,8 +295,7 @@ namespace Libplanet.Net
         }
 
         /// <summary>
-        /// Joins to the peer-to-peer network and starts to periodically synchronize
-        /// the <see cref="BlockChain"/>.
+        /// Starts to periodically synchronize the <see cref="BlockChain"/>.
         /// </summary>
         /// <param name="distributeInterval">The time period of peer exchange.</param>
         /// <param name="broadcastTxInterval">The time period of exchange of staged transactions.
@@ -306,14 +305,6 @@ namespace Libplanet.Net
         /// <returns>An awaitable task without value.</returns>
         /// <exception cref="SwarmException">Thrown when this <see cref="Swarm{T}"/> instance is
         /// already <see cref="Running"/>.</exception>
-        /// <remarks>If the <see cref="BlockChain"/> has no blocks at all or there are long behind
-        /// blocks to caught in the network this method could lead to unexpected behaviors, because
-        /// this tries to <see cref="IAction.Render"/> <em>all</em> actions in the behind blocks
-        /// so that there are a lot of calls to <see cref="IAction.Render"/> method in a short
-        /// period of time.  This can lead a game startup slow.  If you want to omit rendering of
-        /// these actions in the behind blocks use <see cref=
-        /// "PreloadAsync(IProgress{BlockDownloadState}, IImmutableSet{Address}, CancellationToken)"
-        /// /> method too.</remarks>
         public async Task StartAsync(
             TimeSpan distributeInterval,
             TimeSpan broadcastTxInterval,
@@ -384,8 +375,6 @@ namespace Libplanet.Net
                         _logger);
 
                     Running = true;
-
-                    // await PreloadAsync(render: true, cancellationToken: _cancellationToken);
                 }
 
                 var tasks = new List<Task>
@@ -418,13 +407,22 @@ namespace Libplanet.Net
             }
         }
 
+        /// <summary>
+        /// Joins to the peer-to-peer network using seed peers.
+        /// </summary>
+        /// <param name="seedPeers">List of seed peers.</param>
+        /// <param name="cancellationToken">A cancellation token used to propagate notification
+        /// that this operation should be canceled.</param>
+        /// <returns>An awaitable task without value.</returns>
+        /// <exception cref="SwarmException">Thrown when this <see cref="Swarm{T}"/> instance is
+        /// not <see cref="Running"/>.</exception>
         public async Task BootstrapAsync(
-            IEnumerable<Peer> bootstrapPeers,
+            IEnumerable<Peer> seedPeers,
             CancellationToken cancellationToken = default(CancellationToken))
         {
-            if (_protocol is null)
+            if (!Running)
             {
-                throw new SwarmException("Protocol is not ready");
+                throw new SwarmException("Swarm is not running.");
             }
 
             if (cancellationToken == default(CancellationToken))
@@ -432,11 +430,11 @@ namespace Libplanet.Net
                 cancellationToken = _cancellationToken;
             }
 
-            if (!(bootstrapPeers is null))
+            if (!(seedPeers is null))
             {
                 try
                 {
-                    await _protocol.BootstrapAsync(bootstrapPeers.ToList(), cancellationToken);
+                    await _protocol.BootstrapAsync(seedPeers.ToList(), cancellationToken);
                 }
                 catch (Exception e)
                 {
