@@ -1705,35 +1705,18 @@ namespace Libplanet.Net
         private void DoBroadcast(object sender, NetMQQueueEventArgs<Message> e)
         {
             Message msg = e.Queue.Dequeue();
-            NetMQMessage netMQMessage = msg.ToNetMQMessage(_privateKey, AsPeer);
 
             // FIXME Should replace with PUB/SUB model.
             try
             {
-                /*Task.WhenAll(
-                    _dealers.Values.Select(s =>
-                        Task.Run(() => s.SendMultipartMessage(netMQMessage))
-                    )
-                ).Wait();*/
-                /*Task.WhenAll(
-                    Peers.Select(peer =>
-                        SendMessageAsync(peer, msg))).Wait();*/
-
                 _logger.Debug($"Broadcasting message [{msg}]");
-                List<Task> tasks = new List<Task>();
                 _logger.Debug($"Peers to broadcast : {_protocol.PeersToBroadcast.Count}");
                 foreach (Peer peer in _protocol.PeersToBroadcast)
                 {
-                    if (_dealers.ContainsKey(peer.Address))
-                    {
-                        _logger.Debug($"Broadcastring to.. [{peer.Address.ToHex()}]");
-                        _dealers[peer.Address].SendMultipartMessage(netMQMessage);
-                    }
+                    SendMessageAsync(peer, msg).Wait();
                 }
 
                 _logger.Debug($"[{msg}] broadcasting completed.");
-
-                /*Task.WhenAll(tasks).Wait();*/
             }
             catch (TimeoutException ex)
             {
