@@ -703,15 +703,15 @@ namespace Libplanet.Net
             }
 
             DealerSocket dealer;
-            if (_dealers.Keys.Contains(peer.Address))
-            {
-                dealer = _dealers[peer.Address];
-            }
-            else
+            if (NeedsNewDealer(peer))
             {
                 dealer = await CreateDealerSocket(peer);
                 string address = ToNetMQAddress(peer);
                 dealer.Connect(address);
+            }
+            else
+            {
+                dealer = _dealers[peer.Address];
             }
 
             try
@@ -722,13 +722,9 @@ namespace Libplanet.Net
                     message = pong;
                 }
 
-                _logger.Debug($"Trying to send [{message}] to [{peer.Address.ToHex()}]...");
+                _logger.Debug($"Trying to send [{message}] to [{peer.ToString()}]...");
 
                 dealer.SendMultipartMessage(message.ToNetMQMessage(_privateKey, AsPeer));
-            }
-            catch (TimeoutException)
-            {
-                _logger.Debug("Timeout occurred during SendMessageAsync().");
             }
             catch (Exception e)
             {
@@ -1741,22 +1737,25 @@ namespace Libplanet.Net
             _replyQueue.Enqueue(reply);
         }
 
-        private bool IsUnknownPeer(Peer sender)
+        private bool NeedsNewDealer(Peer peer)
         {
             Peer existing = Peers
-                .FirstOrDefault(p => sender.PublicKey.Equals(p.PublicKey));
+                .FirstOrDefault(p => peer.PublicKey.Equals(p.PublicKey));
 
             if (existing is null)
             {
                 return true;
             }
 
-            if (!existing.EndPoint.Equals(sender.EndPoint))
+            if (!existing.EndPoint.Equals(peer.EndPoint))
             {
                 // Clear outdated existing peer.
-                Peers.Remove(existing);
                 CloseDealer(existing);
+                return true;
+            }
 
+            if (!_dealers.ContainsKey(peer.Address))
+            {
                 return true;
             }
 
