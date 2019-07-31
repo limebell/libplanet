@@ -7,7 +7,7 @@ using System.Runtime.Serialization.Formatters.Binary;
 using Libplanet.Crypto;
 using Libplanet.Serialization;
 
-namespace Libplanet.Net.Protocols
+namespace Libplanet.Net
 {
     /// <summary>
     /// A representation of peer node.

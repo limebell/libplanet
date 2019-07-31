@@ -7,8 +7,8 @@ using System.Net;
 using System.Runtime.Serialization.Formatters.Binary;
 using System.Security.Cryptography;
 using Libplanet.Crypto;
+using Libplanet.Net;
 using Libplanet.Net.Messages;
-using Libplanet.Net.Protocols;
 using NetMQ;
 using Xunit;
 

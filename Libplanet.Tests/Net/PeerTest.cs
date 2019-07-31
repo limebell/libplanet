@@ -3,7 +3,7 @@ using System.IO;
 using System.Net;
 using System.Runtime.Serialization.Formatters.Binary;
 using Libplanet.Crypto;
-using Libplanet.Net.Protocols;
+using Libplanet.Net;
 using Xunit;
 
 namespace Libplanet.Tests.Net
