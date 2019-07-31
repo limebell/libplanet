@@ -724,7 +724,18 @@ namespace Libplanet.Net
 
                 _logger.Debug($"Trying to send [{message}] to [{peer.ToString()}]...");
 
-                dealer.SendMultipartMessage(message.ToNetMQMessage(_privateKey, AsPeer));
+                // dealer.SendMultipartMessage(message.ToNetMQMessage(_privateKey, AsPeer));
+                if (!dealer.TrySendMultipartMessage(
+                       TimeSpan.FromSeconds(3),
+                       message.ToNetMQMessage(_privateKey, AsPeer)))
+                {
+                    throw new TimeoutException();
+                }
+            }
+            catch (TimeoutException e)
+            {
+                _logger.Error(e, "Timeout occurred during SendMessageAsync()");
+                _protocol.Timeout(this, peer);
             }
             catch (Exception e)
             {
