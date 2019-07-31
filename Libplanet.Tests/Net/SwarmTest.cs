@@ -131,6 +131,131 @@ namespace Libplanet.Tests.Net
         }
 
         [Fact(Timeout = Timeout)]
+        public async Task CanHandleReconnection()
+        {
+            Swarm<DumbAction> seed = new Swarm<DumbAction>(
+                blockChain: _blockchains[0],
+                privateKey: new PrivateKey(),
+                appProtocolVersion: 1,
+                host: IPAddress.Loopback.ToString());
+
+            BlockChain<DumbAction> blockChain = _blockchains[1];
+            PrivateKey privateKey = new PrivateKey();
+            string host = IPAddress.Loopback.ToString();
+
+            Swarm<DumbAction> swarmA = new Swarm<DumbAction>(
+                blockChain: blockChain,
+                privateKey: privateKey,
+                appProtocolVersion: 1,
+                host: host);
+            Swarm<DumbAction> swarmB = new Swarm<DumbAction>(
+                blockChain: blockChain,
+                privateKey: privateKey,
+                appProtocolVersion: 1,
+                host: host);
+
+            try
+            {
+                await StartAsync(seed);
+                await StartAsync(swarmA);
+                await StartAsync(swarmB);
+                await swarmA.AddPeersAsync(new[] { seed.AsPeer }, true);
+                await swarmA.StopAsync();
+                await swarmB.AddPeersAsync(new[] { seed.AsPeer }, true);
+
+                Assert.Contains(swarmB.AsPeer, seed.Peers);
+                Assert.Contains(seed.AsPeer, swarmB.Peers);
+            }
+            finally
+            {
+                await seed.StopAsync();
+                await swarmA.StopAsync();
+                await swarmB.StopAsync();
+            }
+        }
+
+        [Fact(Timeout = Timeout)]
+        public async Task CanBroadcastBlockToReconnectedPeer()
+        {
+            BlockChain<DumbAction> chainWithBlocks = _blockchains[0];
+            Swarm<DumbAction> seed = new Swarm<DumbAction>(
+                blockChain: chainWithBlocks,
+                privateKey: new PrivateKey(),
+                appProtocolVersion: 1,
+                host: IPAddress.Loopback.ToString());
+
+            BlockChain<DumbAction> chainWithoutBlocks = _blockchains[1];
+            PrivateKey privateKey = new PrivateKey();
+            string host = IPAddress.Loopback.ToString();
+
+            Swarm<DumbAction> swarmA = new Swarm<DumbAction>(
+                blockChain: chainWithoutBlocks,
+                privateKey: privateKey,
+                appProtocolVersion: 1,
+                host: host);
+            Swarm<DumbAction> swarmB = new Swarm<DumbAction>(
+                blockChain: chainWithoutBlocks,
+                privateKey: privateKey,
+                appProtocolVersion: 1,
+                host: host);
+
+            foreach (int i in Enumerable.Range(0, 10))
+            {
+                chainWithBlocks.MineBlock(_fx1.Address1);
+                await Task.Delay(100);
+            }
+
+            try
+            {
+                await StartAsync(seed);
+                await StartAsync(swarmA);
+                await StartAsync(swarmB);
+                await swarmA.AddPeersAsync(new[] { seed.AsPeer }, true);
+                await swarmA.StopAsync();
+                await swarmB.AddPeersAsync(new[] { seed.AsPeer }, true);
+
+                Assert.Contains(swarmB.AsPeer, seed.Peers);
+                Assert.Contains(seed.AsPeer, swarmB.Peers);
+
+                seed.BroadcastBlocks(new[] { chainWithBlocks.Last() });
+
+                await swarmB.BlockReceived.WaitAsync();
+
+                Assert.Equal(chainWithBlocks.AsEnumerable(), chainWithoutBlocks);
+            }
+            finally
+            {
+                await seed.StopAsync();
+                await swarmA.StopAsync();
+                await swarmB.StopAsync();
+            }
+        }
+
+        [Fact(Timeout = Timeout)]
+        public async Task CanNotBroadcastBeforeStart()
+        {
+            Peer peer = new Peer(
+                    new PublicKey(new byte[]
+                    {
+                        0x04, 0xb5, 0xa2, 0x4a, 0xa2, 0x11, 0x27, 0x20, 0x42, 0x3b,
+                        0xad, 0x39, 0xa0, 0x20, 0x51, 0x82, 0x37, 0x9d, 0x6f, 0x2b,
+                        0x33, 0xe3, 0x48, 0x7c, 0x9a, 0xb6, 0xcc, 0x8f, 0xc4, 0x96,
+                        0xf8, 0xa5, 0x48, 0x34, 0x40, 0xef, 0xbb, 0xef, 0x06, 0x57,
+                        0xac, 0x2e, 0xf6, 0xc6, 0xee, 0x05, 0xdb, 0x06, 0xa9, 0x45,
+                        0x32, 0xfd, 0xa7, 0xdd, 0xc4, 0x4a, 0x16, 0x95, 0xe5, 0xce,
+                        0x1a, 0x3d, 0x3c, 0x76, 0xdb,
+                    }),
+                    new DnsEndPoint("0.0.0.0", 1234));
+            Swarm<DumbAction> swarm = _swarms[0];
+            Task t = swarm.BootstrapAsync(new[] { peer });
+
+            Assert.True(t.IsFaulted);
+            Assert.IsType<SwarmException>(t.Exception.InnerException);
+
+            await swarm.StopAsync();
+        }
+
+        [Fact(Timeout = Timeout)]
         public async Task StopAsync()
         {
             Swarm<DumbAction> swarm = _swarms[0];
