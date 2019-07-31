@@ -531,12 +531,29 @@ namespace Libplanet.Net
             IList<(Peer, long?)> peersWithHeight =
                 Peers.Select(p => (p, _tips[p.Address])).ToList();
 
-            await SyncBehindsBlocksFromPeersAsync(
+            /*await SyncBehindsBlocksFromPeersAsync(
                 peersWithHeight,
                 progress,
                 cancellationToken,
                 render
-            );
+            );*/
+
+            if (Peers.First() != null)
+            {
+                _logger.Debug("Synchronizing previous blocks from " +
+                    $"[{Peers.First().Address.ToHex()}]");
+                BlockChain<T> synced = await SyncPreviousBlocksAsync(
+                    Peers.First(),
+                    null,
+                    progress,
+                    evaluateActions: render,
+                    cancellationToken: cancellationToken
+                );
+                if (!synced.Id.Equals(_blockChain.Id))
+                {
+                    _blockChain.Swap(synced, render);
+                }
+            }
 
             if (_blockChain.Tip is null)
             {
