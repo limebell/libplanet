@@ -42,10 +42,11 @@ namespace Libplanet.Net.Protocols
         {
             _lastUpdated = DateTimeOffset.UtcNow;
             ReplacementCache.Remove(peer);
+            Peer exists = _peers.Find(p => p.PublicKey.Equals(peer.PublicKey));
 
-            if (_peers.Contains(peer))
+            if (!(exists is null))
             {
-                _peers.Remove(peer);
+                _peers.Remove(exists);
                 _peers.Add(peer);
                 return null;
             }
