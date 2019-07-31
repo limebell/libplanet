@@ -47,7 +47,7 @@ namespace Libplanet.Net
         private readonly BlockChain<T> _blockChain;
         private readonly PrivateKey _privateKey;
         private readonly RouterSocket _router;
-        private readonly IDictionary<Address, DealerSocket> _dealers;
+        private readonly IDictionary<Peer, DealerSocket> _dealers;
         private readonly IDictionary<Address, long?> _tips;
         private readonly int _appProtocolVersion;
 
@@ -136,7 +136,7 @@ namespace Libplanet.Net
             DifferentVersionPeerEncountered = differentVersionPeerEncountered;
 
             _expectedPongs = new ConcurrentDictionary<Peer, AsyncAutoResetEvent>();
-            _dealers = new ConcurrentDictionary<Address, DealerSocket>();
+            _dealers = new ConcurrentDictionary<Peer, DealerSocket>();
             _tips = new ConcurrentDictionary<Address, long?>();
             _router = new RouterSocket();
             _router.Options.RouterHandover = true;
@@ -711,7 +711,7 @@ namespace Libplanet.Net
             }
             else
             {
-                dealer = _dealers[peer.Address];
+                dealer = _dealers[peer];
             }
 
             try
@@ -1739,7 +1739,7 @@ namespace Libplanet.Net
 
         private bool NeedsNewDealer(Peer peer)
         {
-            Peer existing = Peers
+            Peer existing = _dealers.Keys
                 .FirstOrDefault(p => peer.PublicKey.Equals(p.PublicKey));
 
             if (existing is null)
@@ -1754,11 +1754,6 @@ namespace Libplanet.Net
                 return true;
             }
 
-            if (!_dealers.ContainsKey(peer.Address))
-            {
-                return true;
-            }
-
             return false;
         }
 
@@ -1770,10 +1765,10 @@ namespace Libplanet.Net
         private void CloseDealer(Peer peer)
         {
             CheckStarted();
-            if (_dealers.TryGetValue(peer.Address, out DealerSocket dealer))
+            if (_dealers.TryGetValue(peer, out DealerSocket dealer))
             {
                 dealer.Dispose();
-                _dealers.Remove(peer.Address);
+                _dealers.Remove(peer);
             }
         }
 
@@ -1784,15 +1779,8 @@ namespace Libplanet.Net
                 await CreatePermission(peer);
             }
 
-            // We create a new DealerSocket for each DialPeerAsync()
-            // because NetMQ doesn't handle properly previosuly connected sockets.
-            if (_dealers.TryGetValue(peer.Address, out DealerSocket dealer))
-            {
-                dealer.Dispose();
-            }
-
-            dealer = new DealerSocket();
-            _dealers[peer.Address] = dealer;
+            DealerSocket dealer = new DealerSocket();
+            _dealers[peer] = dealer;
             return dealer;
         }
 
