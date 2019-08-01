@@ -25,7 +25,7 @@ namespace Libplanet.Net.Protocols
 
         private readonly Swarm<T> _swarm;
         private readonly int _appProtocolVersion;
-        private readonly Peer _thisPeer;
+        private readonly Address _address;
         private readonly System.Random _random;
         private readonly RoutingTable _routing;
         private readonly ConcurrentDictionary<string, ExpectedPong> _expectedPongs;
@@ -38,6 +38,7 @@ namespace Libplanet.Net.Protocols
 
         public KademliaProtocol(
             Swarm<T> swarm,
+            Address address,
             int appProtocolVersion,
             CancellationToken cancellationToken,
             ILogger logger)
@@ -47,10 +48,10 @@ namespace Libplanet.Net.Protocols
             _cancellationToken = cancellationToken;
             _logger = logger;
 
-            _thisPeer = _swarm.AsPeer;
+            _address = address;
             _random = new System.Random();
             _routing = new RoutingTable(
-                _thisPeer, TableSize, BucketSize, _random);
+                _address, TableSize, BucketSize, _random);
             _expectedPongs = new ConcurrentDictionary<string, ExpectedPong>();
             _deletedPingids = new ConcurrentBag<string>();
             _findRequests = new ConcurrentDictionary<Address, FindRequest>();
@@ -98,7 +99,7 @@ namespace Libplanet.Net.Protocols
 
             foreach (Peer bootstrapPeer in bootstrapPeers)
             {
-                if (bootstrapPeer == _thisPeer)
+                if (bootstrapPeer.Address.Equals(_address))
                 {
                     continue;
                 }
@@ -128,7 +129,7 @@ namespace Libplanet.Net.Protocols
                     $"Argument {nameof(peer)} is null but has pingid [{pingid}].");
             }
 
-            if (peer == _thisPeer)
+            if (peer.Address.Equals(_address))
             {
                 throw new ArgumentException(
                     $"Argument {nameof(peer)} is equal to self.");
@@ -199,7 +200,7 @@ namespace Libplanet.Net.Protocols
                 {
                     // This ensures connection with seed peer
                     _bootstrapCompleted.Set();
-                    await DoFindPeerAsync(_thisPeer.Address, ep.Target);
+                    await DoFindPeerAsync(_address, ep.Target);
                 }
             }
 
@@ -280,7 +281,7 @@ namespace Libplanet.Net.Protocols
         public string Trace()
         {
             string trace = "================================================\n";
-            trace += $"Routing table of [{_thisPeer.Address.ToHex()}]";
+            trace += $"Routing table of [{_address.ToHex()}]";
             for (int i = 0; i < TableSize; i++)
             {
                 if (!_routing.BucketOf(i).Empty())
@@ -318,7 +319,8 @@ namespace Libplanet.Net.Protocols
 
             byte[] echo = new SHA256CryptoServiceProvider()
                 .ComputeHash(Encoding.ASCII.GetBytes(
-                    _thisPeer.ToString() +
+                    _address.ToString() +
+                    _appProtocolVersion +
                     DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()));
             string pingid = MakePingId(echo, target);
             _expectedPongs[pingid] = new ExpectedPong(null, target, replacement, bootstrap);
@@ -396,7 +398,7 @@ namespace Libplanet.Net.Protocols
         // send pong back to remote
         private async Task ReceivePingAsync(Peer remote, byte[] echo)
         {
-            if (remote == _thisPeer)
+            if (remote.Address.Equals(_address))
             {
                 throw new ArgumentException(
                     "Cannot receive ping from self");
@@ -409,7 +411,7 @@ namespace Libplanet.Net.Protocols
         // receive pong
         private async Task ReceivePongAsync(Peer remote, byte[] echoed)
         {
-            if (remote == _thisPeer)
+            if (remote.Address.Equals(_address))
             {
                 throw new ArgumentException(
                     "Cannot receive pong from self");
@@ -433,7 +435,7 @@ namespace Libplanet.Net.Protocols
             List<Task> tasks = new List<Task>();
             foreach (Peer peer in found)
             {
-                if (peer != _thisPeer && !_routing.Contains(peer))
+                if (!peer.Address.Equals(_address) && !_routing.Contains(peer))
                 {
                     peers.Add(peer);
                 }
@@ -476,7 +478,7 @@ namespace Libplanet.Net.Protocols
 
             foreach (Peer peer in peers)
             {
-                if (peer != _thisPeer)
+                if (!peer.Address.Equals(_address))
                 {
                     tasks.Add(PingAsync(peer));
                 }

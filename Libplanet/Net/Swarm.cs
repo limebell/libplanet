@@ -168,6 +168,13 @@ namespace Libplanet.Net
             string loggerId = _privateKey.PublicKey.ToAddress().ToHex();
             _logger = Log.ForContext<Swarm<T>>()
                 .ForContext("SwarmId", loggerId);
+
+            _protocol = new KademliaProtocol<T>(
+                this,
+                _privateKey.PublicKey.ToAddress(),
+                _appProtocolVersion,
+                _cancellationToken,
+                _logger);
         }
 
         ~Swarm()
