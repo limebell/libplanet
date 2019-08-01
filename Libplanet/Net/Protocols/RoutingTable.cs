@@ -10,7 +10,7 @@ namespace Libplanet.Net.Protocols
 {
     internal class RoutingTable
     {
-        private readonly Peer _thisPeer;
+        private readonly Address _address;
         private readonly int _tableSize;
         private readonly int _bucketSize;
         private readonly Random _random;
@@ -18,12 +18,12 @@ namespace Libplanet.Net.Protocols
         private readonly AsyncLock _bucketMutex;
 
         public RoutingTable(
-            Peer thisPeer,
+            Address address,
             int tableSize,
             int bucketSize,
             Random random)
         {
-            _thisPeer = thisPeer;
+            _address = address;
             _tableSize = tableSize;
             _bucketSize = bucketSize;
             _random = random;
@@ -87,7 +87,7 @@ namespace Libplanet.Net.Protocols
 
         public async Task<Peer> AddPeerAsync(Peer peer)
         {
-            if (peer == _thisPeer)
+            if (peer.Address.Equals(_address))
             {
                 throw new ArgumentException(
                     $"Cannot add self to routing table");
@@ -112,7 +112,7 @@ namespace Libplanet.Net.Protocols
 
         public async Task<bool> RemovePeerAsync(Peer peer)
         {
-            if (peer == _thisPeer)
+            if (peer.Address.Equals(_address))
             {
                 throw new ArgumentException(
                     $"Cannot remove self from routing table");
@@ -202,7 +202,7 @@ namespace Libplanet.Net.Protocols
 
         private int GetBucketIndexOf(Peer peer)
         {
-            int plength = Kademlia.CommonPrefixLength(peer, _thisPeer);
+            int plength = Kademlia.CommonPrefixLength(peer.Address, _address);
             return plength > _tableSize - 1 ? _tableSize - 1 : plength;
         }
     }

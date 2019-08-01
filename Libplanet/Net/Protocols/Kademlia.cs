@@ -22,19 +22,9 @@ namespace Libplanet.Net.Protocols
 
         // calculate length of common prefix length
         // by finding first bit of xor value
-        public static int CommonPrefixLength(Peer a, Peer b)
+        public static int CommonPrefixLength(Address a, Address b)
         {
-            if (a is null)
-            {
-                throw new ArgumentNullException(nameof(a));
-            }
-
-            if (b is null)
-            {
-                throw new ArgumentNullException(nameof(b));
-            }
-
-            Address distance = CalculateDistance(a.Address, b.Address);
+            Address distance = CalculateDistance(a, b);
             int length = 0;
 
             foreach (byte x in distance.ToByteArray())
