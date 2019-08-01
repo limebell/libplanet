@@ -538,7 +538,7 @@ namespace Libplanet.Net
                 render
             );*/
 
-            if (Peers.First() != null)
+            if (Peers.Count != 0)
             {
                 _logger.Debug("Synchronizing previous blocks from " +
                     $"[{Peers.First().Address.ToHex()}]");
