@@ -233,7 +233,7 @@ namespace Libplanet.Tests.Net
         }
 
         [Fact(Timeout = Timeout)]
-        public async Task CanNotBroadcastBeforeStart()
+        public async Task CanNotBootstrapBeforeStart()
         {
             Peer peer = new Peer(
                     new PublicKey(new byte[]
@@ -978,7 +978,6 @@ namespace Libplanet.Tests.Net
 
                 await swarmA.AddPeersAsync(new[] { swarmB.AsPeer }, true);
                 await swarmB.AddPeersAsync(new[] { swarmC.AsPeer }, true);
-                await swarmC.AddPeersAsync(new[] { swarmA.AsPeer }, true);
 
                 Log.Debug(swarmA.TraceTable());
                 Log.Debug(swarmB.TraceTable());
@@ -1287,6 +1286,91 @@ namespace Libplanet.Tests.Net
             {
                 await minerSwarm.StopAsync();
                 await receiverSwarm.StopAsync();
+            }
+        }
+
+        [Fact(Timeout = Timeout)]
+        public async Task PreloadFromNominer()
+        {
+            Swarm<DumbAction> minerSwarm = _swarms[0];
+            Swarm<DumbAction> receiverSwarm = _swarms[1];
+            FileStoreFixture[] fxForNominers = new FileStoreFixture[2];
+            fxForNominers[0] = new FileStoreFixture();
+            fxForNominers[1] = new FileStoreFixture();
+            BlockPolicy<DumbAction> policy = new BlockPolicy<DumbAction>();
+            BlockChain<DumbAction>[] blockChainsForNominers = new BlockChain<DumbAction>[2];
+            blockChainsForNominers[0] = new BlockChain<DumbAction>(policy, fxForNominers[0].Store);
+            blockChainsForNominers[1] = new BlockChain<DumbAction>(policy, fxForNominers[1].Store);
+            Swarm<DumbAction> nominerSwarm0 = new Swarm<DumbAction>(
+                blockChain: blockChainsForNominers[0],
+                privateKey: new PrivateKey(),
+                appProtocolVersion: 1,
+                host: IPAddress.Loopback.ToString());
+            Swarm<DumbAction> nominerSwarm1 = new Swarm<DumbAction>(
+                blockChain: blockChainsForNominers[1],
+                privateKey: new PrivateKey(),
+                appProtocolVersion: 1,
+                host: IPAddress.Loopback.ToString());
+
+            BlockChain<DumbAction> minerChain = _blockchains[0];
+            BlockChain<DumbAction> receiverChain = _blockchains[1];
+
+            foreach (int i in Enumerable.Range(0, 10))
+            {
+                minerChain.MineBlock(_fx1.Address1);
+                await Task.Delay(100);
+            }
+
+            var actualStates = new List<BlockDownloadState>();
+            var progress = new Progress<BlockDownloadState>(state =>
+            {
+                lock (actualStates)
+                {
+                    actualStates.Add(state);
+                }
+            });
+
+            try
+            {
+                await StartAsync(minerSwarm);
+                await StartAsync(nominerSwarm0);
+                await StartAsync(nominerSwarm1);
+                await StartAsync(receiverSwarm);
+
+                await nominerSwarm0.AddPeersAsync(new[] { minerSwarm.AsPeer }, true);
+                await nominerSwarm0.PreloadAsync();
+                await nominerSwarm1.AddPeersAsync(new[] { nominerSwarm0.AsPeer }, true);
+                await nominerSwarm1.PreloadAsync();
+
+                await receiverSwarm.AddPeersAsync(new[] { nominerSwarm1.AsPeer }, true);
+                await receiverSwarm.PreloadAsync(progress);
+
+                Assert.Equal(minerChain.AsEnumerable(), receiverChain.AsEnumerable());
+
+                IEnumerable<BlockDownloadState> expectedStates = minerChain.Select((b, i) =>
+                {
+                    return new BlockDownloadState()
+                    {
+                        ReceivedBlockHash = b.Hash,
+                        TotalBlockCount = 10,
+                        ReceivedBlockCount = i + 1,
+                    };
+                });
+
+                // FIXME: this test does not ensures block download in order
+                Assert.Equal(
+                    expectedStates.ToHashSet(),
+                    actualStates.ToHashSet());
+            }
+            finally
+            {
+                await minerSwarm.StopAsync();
+                await nominerSwarm0.StopAsync();
+                await nominerSwarm1.StopAsync();
+                await receiverSwarm.StopAsync();
+
+                fxForNominers[0].Dispose();
+                fxForNominers[1].Dispose();
             }
         }
 
