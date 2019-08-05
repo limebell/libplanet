@@ -15,11 +15,13 @@ namespace Libplanet.Net.Protocols
 
         ImmutableList<Peer> PeersToBroadcast { get; }
 
-        Task BootstrapAsync(List<Peer> bootstrapPeers, CancellationToken cancellationToken);
+        Task BootstrapAsync(
+            ImmutableList<Peer> bootstrapPeers,
+            TimeSpan? pingSeedTimeout,
+            TimeSpan? findPeerTimeout,
+            CancellationToken cancellationToken);
 
         void ReceiveMessage(object sender, Message message);
-
-        void Timeout(object senter, Peer peer);
 
         string Trace();
     }

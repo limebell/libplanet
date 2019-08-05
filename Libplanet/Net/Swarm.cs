@@ -66,11 +66,11 @@ namespace Libplanet.Net
         private TaskCompletionSource<object> _runningEvent;
         private int? _listenPort;
         private TurnClient _turnClient;
+        private bool _behindNAT;
         private CancellationTokenSource _workerCancellationTokenSource;
         private CancellationToken _cancellationToken;
         private IPAddress _publicIPAddress;
         private IProtocol _protocol;
-        private IDictionary<Peer, AsyncAutoResetEvent> _expectedPongs;
 
         static Swarm()
         {
@@ -135,7 +135,6 @@ namespace Libplanet.Net
             BlockReceived = new AsyncAutoResetEvent();
             DifferentVersionPeerEncountered = differentVersionPeerEncountered;
 
-            _expectedPongs = new ConcurrentDictionary<Peer, AsyncAutoResetEvent>();
             _dealers = new ConcurrentDictionary<Peer, DealerSocket>();
             _tips = new ConcurrentDictionary<Address, long?>();
             _router = new RouterSocket();
@@ -168,13 +167,6 @@ namespace Libplanet.Net
             string loggerId = _privateKey.PublicKey.ToAddress().ToHex();
             _logger = Log.ForContext<Swarm<T>>()
                 .ForContext("SwarmId", loggerId);
-
-            _protocol = new KademliaProtocol<T>(
-                this,
-                _privateKey.PublicKey.ToAddress(),
-                _appProtocolVersion,
-                _cancellationToken,
-                _logger);
         }
 
         ~Swarm()
@@ -292,45 +284,17 @@ namespace Libplanet.Net
             _logger.Debug("Stopped.");
         }
 
-        public async Task StartAsync(
-            int millisecondsDistributeInterval = 1500,
-            int millisecondsBroadcastTxInterval = 5000,
-            CancellationToken cancellationToken = default(CancellationToken))
-        {
-            await StartAsync(
-                TimeSpan.FromMilliseconds(millisecondsDistributeInterval),
-                TimeSpan.FromMilliseconds(millisecondsBroadcastTxInterval),
-                cancellationToken
-            );
-        }
-
-        /// <summary>
-        /// Starts to periodically synchronize the <see cref="BlockChain"/>.
-        /// </summary>
-        /// <param name="distributeInterval">The time period of peer exchange.</param>
-        /// <param name="broadcastTxInterval">The time period of exchange of staged transactions.
-        /// </param>
-        /// <param name="cancellationToken">A cancellation token used to propagate notification
-        /// that this operation should be canceled.</param>
-        /// <returns>An awaitable task without value.</returns>
-        /// <exception cref="SwarmException">Thrown when this <see cref="Swarm{T}"/> instance is
-        /// already <see cref="Running"/>.</exception>
-        /// <remarks>If the <see cref="BlockChain"/> has no blocks at all or there are long behind
-        /// blocks to caught in the network this method could lead to unexpected behaviors, because
-        /// this tries to <see cref="IAction.Render"/> <em>all</em> actions in the behind blocks
-        /// so that there are a lot of calls to <see cref="IAction.Render"/> method in a short
-        /// period of time.  This can lead a game startup slow.  If you want to omit rendering of
-        /// these actions in the behind blocks use <see cref=
-        /// "PreloadAsync(IProgress{PreloadState}, IImmutableSet{Address}, CancellationToken)"
-        /// /> method too.</remarks>
-        public async Task StartAsync(
-            TimeSpan distributeInterval,
-            TimeSpan broadcastTxInterval,
+        public async Task PrepareAsync(
             CancellationToken cancellationToken = default(CancellationToken))
         {
             if (Running)
             {
                 throw new SwarmException("Swarm is already running.");
+            }
+
+            if (!(EndPoint is null))
+            {
+                throw new SwarmException("Swarm is already prepared.");
             }
 
             if (_host is null && !(_iceServers is null))
@@ -355,8 +319,7 @@ namespace Libplanet.Net
                     _workerCancellationTokenSource.Token, cancellationToken
                 ).Token;
             _cancellationToken = workerCancellationToken;
-            var tasks = new List<Task>();
-            var behindNAT = false;
+            _behindNAT = false;
 
             if (!(_turnClient is null))
             {
@@ -364,36 +327,91 @@ namespace Libplanet.Net
 
                 if (await _turnClient.IsBehindNAT())
                 {
-                    behindNAT = true;
+                    _behindNAT = true;
                 }
             }
 
-            if (behindNAT)
+            if (_behindNAT)
             {
                 IPEndPoint turnEp = await _turnClient.AllocateRequestAsync(
                     TurnAllocationLifetime
                 );
                 EndPoint = new DnsEndPoint(turnEp.Address.ToString(), turnEp.Port);
-
-                tasks.Add(BindingProxies(_cancellationToken));
-                tasks.Add(RefreshAllocate(_cancellationToken));
-                tasks.Add(RefreshPermissions(_cancellationToken));
             }
             else
             {
                 EndPoint = new DnsEndPoint(_host, _listenPort.Value);
             }
 
-            using (await _runningMutex.LockAsync())
+            _protocol = new KademliaProtocol<T>(
+                this,
+                _privateKey.PublicKey.ToAddress(),
+                _appProtocolVersion,
+                _cancellationToken,
+                _logger);
+        }
+
+        public async Task StartAsync(
+            int millisecondsBroadcastTxInterval = 5000)
+        {
+            await StartAsync(
+                TimeSpan.FromMilliseconds(millisecondsBroadcastTxInterval)
+            );
+        }
+
+        /// <summary>
+        /// Starts to periodically synchronize the <see cref="BlockChain"/>.
+        /// </summary>
+        /// <param name="broadcastTxInterval">The time period of exchange of staged transactions.
+        /// </param>
+        /// <returns>An awaitable task without value.</returns>
+        /// <exception cref="SwarmException">Thrown when this <see cref="Swarm{T}"/> instance is
+        /// already <see cref="Running"/>.</exception>
+        /// <remarks>If the <see cref="BlockChain"/> has no blocks at all or there are long behind
+        /// blocks to caught in the network this method could lead to unexpected behaviors, because
+        /// this tries to <see cref="IAction.Render"/> <em>all</em> actions in the behind blocks
+        /// so that there are a lot of calls to <see cref="IAction.Render"/> method in a short
+        /// period of time.  This can lead a game startup slow.  If you want to omit rendering of
+        /// these actions in the behind blocks use <see cref=
+        /// "PreloadAsync(IProgress{PreloadState}, IImmutableSet{Address}, CancellationToken)"
+        /// /> method too.</remarks>
+        public async Task StartAsync(TimeSpan broadcastTxInterval)
+        {
+            if (Running)
             {
-                await PreloadAsync(render: true, cancellationToken: _cancellationToken);
-                Running = true;
+                throw new SwarmException("Swarm is already running.");
+            }
+
+            if (EndPoint is null)
+            {
+                throw new SwarmException("Swarm is not prepared.");
             }
 
             try
             {
-                tasks.Add(BroadcastTxAsync(broadcastTxInterval, _cancellationToken));
-                tasks.Add(Task.Run(() => _poller.Run(), _cancellationToken));
+                _logger.Debug("Starting swarm...");
+
+                using (await _runningMutex.LockAsync())
+                {
+                    Running = true;
+                }
+
+                var tasks = new List<Task>
+                {
+                    BroadcastMessageAsync(TimeSpan.FromMilliseconds(30), _cancellationToken),
+                    ReceiveMessageAsync(TimeSpan.FromMilliseconds(30), _cancellationToken),
+                    ReplyMessageAsync(TimeSpan.FromMilliseconds(30), _cancellationToken),
+                    BroadcastTxAsync(broadcastTxInterval, _cancellationToken),
+                };
+
+                if (_behindNAT)
+                {
+                    tasks.Add(BindingProxies(_cancellationToken));
+                    tasks.Add(RefreshAllocate(_cancellationToken));
+                    tasks.Add(RefreshPermissions(_cancellationToken));
+                }
+
+                _logger.Debug("Swarm started.");
 
                 await await Task.WhenAny(tasks);
             }
@@ -412,10 +430,25 @@ namespace Libplanet.Net
             }
         }
 
+        public async Task BootstrapAsync(
+           IEnumerable<Peer> seedPeers,
+           double pingSeedTimeout,
+           double findPeerTimeout,
+           CancellationToken cancellationToken = default(CancellationToken))
+        {
+            await BootstrapAsync(
+                seedPeers,
+                TimeSpan.FromMilliseconds(pingSeedTimeout),
+                TimeSpan.FromMilliseconds(findPeerTimeout),
+                cancellationToken);
+        }
+
         /// <summary>
-        /// Joins to the peer-to-peer network using seed peers.
+        /// Join to the peer-to-peer network using seed peers.
         /// </summary>
         /// <param name="seedPeers">List of seed peers.</param>
+        /// <param name="pingSeedTimeout">Timeout for connecting to seed peers.</param>
+        /// <param name="findPeerTimeout">Timeout for requesting neighbours.</param>
         /// <param name="cancellationToken">A cancellation token used to propagate notification
         /// that this operation should be canceled.</param>
         /// <returns>An awaitable task without value.</returns>
@@ -423,13 +456,10 @@ namespace Libplanet.Net
         /// not <see cref="Running"/>.</exception>
         public async Task BootstrapAsync(
             IEnumerable<Peer> seedPeers,
+            TimeSpan? pingSeedTimeout,
+            TimeSpan? findPeerTimeout,
             CancellationToken cancellationToken = default(CancellationToken))
         {
-            if (!Running)
-            {
-                throw new SwarmException("Swarm is not running.");
-            }
-
             if (cancellationToken == default(CancellationToken))
             {
                 cancellationToken = _cancellationToken;
@@ -439,11 +469,15 @@ namespace Libplanet.Net
             {
                 try
                 {
-                    await _protocol.BootstrapAsync(seedPeers.ToList(), cancellationToken);
+                    await _protocol.BootstrapAsync(
+                        seedPeers.ToImmutableList(),
+                        pingSeedTimeout,
+                        findPeerTimeout,
+                        cancellationToken);
                 }
-                catch (Exception e)
+                catch (Exception)
                 {
-                    throw e;
+                    throw;
                 }
             }
         }
@@ -491,7 +525,7 @@ namespace Libplanet.Net
         /// </returns>
         /// <remarks>This does not render downloaded <see cref="IAction"/>s, but fills states only.
         /// If you want to render all <see cref="IAction"/>s from the genesis block to the recent
-        /// blocks use <see cref="StartAsync(TimeSpan, TimeSpan, CancellationToken)"/> method
+        /// blocks use <see cref="StartAsync(TimeSpan)"/> method
         /// instead.</remarks>
         public Task PreloadAsync(
             IProgress<PreloadState> progress = null,
@@ -507,18 +541,6 @@ namespace Libplanet.Net
             );
         }
 
-        internal string TraceTable()
-        {
-            if (_protocol is null)
-            {
-                return string.Empty;
-            }
-            else
-            {
-                return _protocol.Trace();
-            }
-        }
-
         internal async Task PreloadAsync(
             bool render,
             IProgress<PreloadState> progress = null,
@@ -526,12 +548,19 @@ namespace Libplanet.Net
             CancellationToken cancellationToken = default(CancellationToken)
         )
         {
+            if (EndPoint is null)
+            {
+                throw new SwarmException("Swarm is not prepared.");
+            }
+
             if (trustedStateValidators is null)
             {
                 trustedStateValidators = ImmutableHashSet<Address>.Empty;
             }
 
             Block<T> initialTip = _blockChain.Tip;
+
+            _logger.Debug($"Preload from {Peers.Count} peers.");
 
             IList<(Peer, long?)> peersWithHeight =
                 Peers.Select(p => (p, _tips[p.Address])).ToList();
@@ -663,13 +692,31 @@ namespace Libplanet.Net
             }
         }
 
+        internal string TraceTable()
+        {
+            if (_protocol is null)
+            {
+                return string.Empty;
+            }
+            else
+            {
+                return _protocol.Trace();
+            }
+        }
+
         internal async Task AddPeersAsync(
             IEnumerable<Peer> peers,
-            bool withoutTimeout)
+            TimeSpan? timeout,
+            CancellationToken cancellationToken = default(CancellationToken))
         {
             if (_protocol is null)
             {
                 throw new ArgumentNullException(nameof(_protocol));
+            }
+
+            if (cancellationToken == default(CancellationToken))
+            {
+                cancellationToken = _cancellationToken;
             }
 
             try
@@ -679,17 +726,18 @@ namespace Libplanet.Net
                 List<Task> tasks = new List<Task>();
                 foreach (Peer peer in peers)
                 {
-                    tasks.Add(kp.PingAsync(peer, withoutTimeout: withoutTimeout));
-                    if (withoutTimeout)
-                    {
-                        _expectedPongs[peer] = new AsyncAutoResetEvent();
-                        tasks.Add(_expectedPongs[peer].WaitAsync(_cancellationToken));
-                    }
+                    tasks.Add(kp.PingAsync(
+                        peer,
+                        timeout: timeout,
+                        cancellationToken: cancellationToken));
                 }
 
                 await Task.WhenAll(tasks);
-
-                _expectedPongs.Clear();
+            }
+            catch (TimeoutException)
+            {
+                _logger.Debug("Timeout occurred during AddPeersAsync().");
+                throw;
             }
             catch (TaskCanceledException)
             {
@@ -723,12 +771,6 @@ namespace Libplanet.Net
 
             try
             {
-                if (message is Pong pong)
-                {
-                    pong.TipIndex = _blockChain.Tip?.Index;
-                    message = pong;
-                }
-
                 _logger.Debug($"Trying to send [{message}] to [{peer.ToString()}]...");
 
                 // dealer.SendMultipartMessage(message.ToNetMQMessage(_privateKey, AsPeer));
@@ -742,11 +784,91 @@ namespace Libplanet.Net
             catch (TimeoutException e)
             {
                 _logger.Error(e, "Timeout occurred during SendMessageAsync()");
-                _protocol.Timeout(this, peer);
+                throw;
             }
             catch (Exception e)
             {
                 _logger.Error(e, "An unexpected exception occurred during SendMessageAsync()");
+                throw;
+            }
+        }
+
+        internal async Task<Message> SendMessageWithReplyAsync(
+            Peer peer,
+            Message message,
+            TimeSpan? timeout,
+            CancellationToken cancellationToken)
+        {
+            if (_turnClient != null)
+            {
+                await CreatePermission(peer);
+            }
+
+            try
+            {
+                using (var dealer = new DealerSocket(ToNetMQAddress(peer)))
+                {
+                    _logger.Debug($"Trying to send [{message}] to [{peer.Address.ToHex()}]...");
+
+                    await dealer.SendMultipartMessageAsync(
+                        message.ToNetMQMessage(_privateKey, AsPeer),
+                        timeout: timeout,
+                        cancellationToken: cancellationToken);
+
+                    _logger.Debug($"Message sent, waiting for reply...");
+
+                    NetMQMessage raw = await dealer.ReceiveMultipartMessageAsync(
+                        timeout: timeout,
+                        cancellationToken: cancellationToken);
+
+                    Message reply = Message.Parse(raw, true);
+                    _logger.Debug($"Received [{reply}] from [{peer.Address.ToHex()}]...");
+
+                    // FIXME: please
+                    if (reply is Pong pong)
+                    {
+                        if (pong.AppProtocolVersion != _appProtocolVersion)
+                        {
+                            DifferentProtocolVersionEventArgs args =
+                                new DifferentProtocolVersionEventArgs
+                                {
+                                    ExpectedVersion = _appProtocolVersion,
+                                    ActualVersion = pong.AppProtocolVersion,
+                                };
+
+                            DifferentVersionPeerEncountered?.Invoke(this, args);
+
+                            throw new DifferentAppProtocolVersionException(
+                                $"Peer protocol version is different.",
+                                _appProtocolVersion,
+                                pong.AppProtocolVersion);
+                        }
+
+                        _tips[pong.Remote.Address] = pong.TipIndex;
+                    }
+
+                    return reply;
+                }
+            }
+            catch (DifferentAppProtocolVersionException)
+            {
+                throw;
+            }
+            catch (TimeoutException e)
+            {
+                _logger.Error(e, "Timeout occurred during SendMessageWithReplyAsync().");
+                throw;
+            }
+            catch (TaskCanceledException)
+            {
+                _logger.Debug("Task canceled during SendMessageWithReplyAsync().");
+                throw;
+            }
+            catch (Exception e)
+            {
+                _logger.Error(
+                    e,
+                    "An unexpected exception occurred during SendMessageWithReplyAsync().");
                 throw;
             }
         }
@@ -874,6 +996,11 @@ namespace Libplanet.Net
                     }
                 }
             });
+        }
+
+        internal void ReplyMessage(Message message)
+        {
+            _replyQueue.Enqueue(message);
         }
 
         private void BroadcastMessage(Message message)
@@ -1067,7 +1194,7 @@ namespace Libplanet.Net
             TimeSpan lifetime = TurnAllocationLifetime;
             while (!cancellationToken.IsCancellationRequested)
             {
-                await Task.Delay(lifetime - TimeSpan.FromMinutes(1));
+                await Task.Delay(lifetime - TimeSpan.FromMinutes(1), cancellationToken);
                 lifetime = await _turnClient.RefreshAllocationAsync(lifetime);
             }
         }
@@ -1078,7 +1205,7 @@ namespace Libplanet.Net
             TimeSpan lifetime = TurnPermissionLifetime;
             while (!cancellationToken.IsCancellationRequested)
             {
-                await Task.Delay(lifetime - TimeSpan.FromMinutes(1));
+                await Task.Delay(lifetime - TimeSpan.FromMinutes(1), cancellationToken);
                 await Task.WhenAll(
                     Peers.Select(CreatePermission));
             }
@@ -1240,53 +1367,10 @@ namespace Libplanet.Net
                         break;
                     }
 
-                case Pong pong:
-                    {
-                        if (pong.AppProtocolVersion != _appProtocolVersion)
-                        {
-                            DifferentProtocolVersionEventArgs args =
-                                new DifferentProtocolVersionEventArgs
-                                {
-                                    ExpectedVersion = _appProtocolVersion,
-                                    ActualVersion = pong.AppProtocolVersion,
-                                };
-
-                            DifferentVersionPeerEncountered?.Invoke(this, args);
-                            if (_expectedPongs.ContainsKey(pong.Remote))
-                            {
-                                _expectedPongs[pong.Remote].Set();
-                            }
-
-                            throw new DifferentAppProtocolVersionException(
-                                $"Peer protocol version is different.",
-                                _appProtocolVersion,
-                                pong.AppProtocolVersion);
-                        }
-
-                        _logger.Debug($"Pong received.");
-                        _tips[pong.Remote.Address] = pong.TipIndex;
-
-                        _protocol.ReceiveMessage(this, pong);
-
-                        if (_expectedPongs.ContainsKey(message.Remote))
-                        {
-                            _expectedPongs[message.Remote].Set();
-                        }
-
-                        break;
-                    }
-
                 case FindPeer findPeer:
                     {
                         _logger.Debug($"FindPeer received.");
                         _protocol.ReceiveMessage(this, findPeer);
-                        break;
-                    }
-
-                case Neighbours neighbours:
-                    {
-                        _logger.Debug($"Neighbours received.");
-                        _protocol.ReceiveMessage(this, neighbours);
                         break;
                     }
 
@@ -1300,7 +1384,7 @@ namespace Libplanet.Net
                         {
                             Identity = getBlockHashes.Identity,
                         };
-                        _replyQueue.Enqueue(reply);
+                        ReplyMessage(reply);
                         break;
                     }
 
@@ -1627,7 +1711,7 @@ namespace Libplanet.Net
                     {
                         Identity = getTxs.Identity,
                     };
-                    _replyQueue.Enqueue(response);
+                    ReplyMessage(response);
                 }
             }
         }
@@ -1686,7 +1770,7 @@ namespace Libplanet.Net
                     {
                         Identity = getData.Identity,
                     };
-                    _replyQueue.Enqueue(response);
+                    ReplyMessage(response);
                     blocks.Clear();
                 }
             }
@@ -1697,7 +1781,7 @@ namespace Libplanet.Net
                 {
                     Identity = getData.Identity,
                 };
-                _replyQueue.Enqueue(response);
+                ReplyMessage(response);
             }
 
             _logger.Debug("Transfer complete.");
@@ -1752,7 +1836,7 @@ namespace Libplanet.Net
             {
                 Identity = getRecentStates.Identity,
             };
-            _replyQueue.Enqueue(reply);
+            ReplyMessage(reply);
         }
 
         private bool NeedsNewDealer(Peer peer)
@@ -1865,6 +1949,13 @@ namespace Libplanet.Net
         private void DoReply(object sender, NetMQQueueEventArgs<Message> e)
         {
             Message msg = e.Queue.Dequeue();
+
+            // FIXME: this works, but should be fixed.
+            if (msg is Pong pong)
+            {
+                pong.TipIndex = _blockChain.Tip?.Index;
+                msg = pong;
+            }
 
             _logger.Debug($"Reply {msg} to {ByteUtil.Hex(msg.Identity)}...");
             NetMQMessage netMQMessage = msg.ToNetMQMessage(_privateKey, AsPeer);
