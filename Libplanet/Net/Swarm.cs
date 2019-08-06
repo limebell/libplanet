@@ -402,6 +402,7 @@ namespace Libplanet.Net
                     ReceiveMessageAsync(TimeSpan.FromMilliseconds(30), _cancellationToken),
                     ReplyMessageAsync(TimeSpan.FromMilliseconds(30), _cancellationToken),
                     BroadcastTxAsync(broadcastTxInterval, _cancellationToken),
+                    _protocol.RefreshAsync(_cancellationToken),
                 };
 
                 if (_behindNAT)

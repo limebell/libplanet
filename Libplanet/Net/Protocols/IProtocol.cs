@@ -21,6 +21,8 @@ namespace Libplanet.Net.Protocols
             TimeSpan? findPeerTimeout,
             CancellationToken cancellationToken);
 
+        Task RefreshAsync(CancellationToken cancellationToken);
+
         void ReceiveMessage(object sender, Message message);
 
         string Trace();

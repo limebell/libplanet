@@ -1,15 +1,11 @@
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
-using System.Security.Cryptography;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Libplanet.Action;
 using Libplanet.Net.Messages;
-using Nito.AsyncEx;
 using Serilog;
 
 namespace Libplanet.Net.Protocols
@@ -21,7 +17,8 @@ namespace Libplanet.Net.Protocols
         private const int TableSize = Address.Size * sizeof(byte) * 8;
         private const int FindConcurrency = 3;
 
-        private static readonly TimeSpan RequestTimeout = TimeSpan.FromMilliseconds(6 * 300);
+        // FIXME: This should be configurable?
+        private static readonly TimeSpan RequestTimeout = TimeSpan.FromMilliseconds(3 * 1000);
         private static readonly TimeSpan IdleBucketRefreshInterval = TimeSpan.FromMinutes(30);
 
         private readonly Swarm<T> _swarm;
@@ -152,6 +149,35 @@ namespace Libplanet.Net.Protocols
             {
                 _logger.Error("An unexpected exception occurred during BootstrapAsync().");
                 throw;
+            }
+        }
+
+        public async Task RefreshAsync(CancellationToken cancellationToken)
+        {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                await Task.Delay(IdleBucketRefreshInterval, cancellationToken);
+
+                byte[] buffer = new byte[20];
+                List<Task> tasks = new List<Task>();
+                for (int i = 0; i < FindConcurrency; i++)
+                {
+                    _random.NextBytes(buffer);
+                    tasks.Add(FindPeerAsync(
+                        new Address(buffer),
+                        null,
+                        RequestTimeout,
+                        cancellationToken));
+                }
+
+                tasks.Add(FindPeerAsync(_address, null, RequestTimeout, cancellationToken));
+                try
+                {
+                    await Task.WhenAll(tasks);
+                }
+                catch (TimeoutException)
+                {
+                }
             }
         }
 
