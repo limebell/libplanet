@@ -427,10 +427,10 @@ namespace Libplanet.Tests.Net
             }
         }
 
-        [Fact(Timeout = Timeout)]
+        [Fact(Timeout = 2 * Timeout)]
         public async Task BootstrapManyAsync()
         {
-            int size = 10;
+            int size = 20;
 
             var policy = new BlockPolicy<DumbAction>();
             FileStoreFixture[] fxs = new FileStoreFixture[size];
@@ -543,7 +543,6 @@ namespace Libplanet.Tests.Net
                 chainA.AsEnumerable().ToHashSet(),
                 chainB.AsEnumerable().ToHashSet());
         }
-
 
         [Fact(Timeout = Timeout)]
         public async Task DetectAppProtocolVersion()
@@ -949,7 +948,7 @@ namespace Libplanet.Tests.Net
         [Fact(Timeout = Timeout)]
         public async Task BroadcastTxAsyncMany()
         {
-            int size = 8;
+            int size = 5;
 
             var policy = new BlockPolicy<DumbAction>();
             FileStoreFixture[] fxs = new FileStoreFixture[size];
@@ -1408,26 +1407,36 @@ namespace Libplanet.Tests.Net
                 await RunAsync(nominerSwarm0);
                 await RunAsync(nominerSwarm1);
                 await receiverSwarm.PrepareAsync();
+                minerChain.FindNextHashesChunkSize = 2;
+                blockChainsForNominers[0].FindNextHashesChunkSize = 2;
+                blockChainsForNominers[1].FindNextHashesChunkSize = 2;
 
                 await nominerSwarm0.AddPeersAsync(new[] { minerSwarm.AsPeer }, null);
                 await nominerSwarm0.PreloadAsync();
                 await nominerSwarm1.AddPeersAsync(new[] { nominerSwarm0.AsPeer }, null);
                 await nominerSwarm1.PreloadAsync();
-
                 await receiverSwarm.AddPeersAsync(new[] { nominerSwarm1.AsPeer }, null);
                 await receiverSwarm.PreloadAsync(progress);
 
                 Assert.Equal(minerChain.AsEnumerable(), receiverChain.AsEnumerable());
 
-                IEnumerable<BlockDownloadState> expectedStates = minerChain.Select((b, i) =>
+                PreloadState[] expectedStates = minerChain.Select((b, i) =>
                 {
-                    return new BlockDownloadState()
+                    return new BlockDownloadState
                     {
                         ReceivedBlockHash = b.Hash,
                         TotalBlockCount = 10,
                         ReceivedBlockCount = i + 1,
                     };
-                });
+                }).ToArray();
+
+                expectedStates = expectedStates.Concat(minerChain.Select(
+                    (b, i) => new ActionExecutionState()
+                    {
+                        ExecutedBlockHash = b.Hash,
+                        TotalBlockCount = 10,
+                        ExecutedBlockCount = i + 1,
+                    })).ToArray();
 
                 // FIXME: this test does not ensures block download in order
                 Assert.Equal(
@@ -1603,7 +1612,7 @@ namespace Libplanet.Tests.Net
             Assert.NotNull(minerChain.Tip);
             minerChain.FindNextHashesChunkSize = 2;
             await RunAsync(minerSwarm);
-            await receiverSwarm.AddPeersAsync(new[] { minerSwarm.AsPeer });
+            await receiverSwarm.AddPeersAsync(new[] { minerSwarm.AsPeer }, null);
 
             CancellationTokenSource cts = new CancellationTokenSource();
             cts.CancelAfter(cancelAfter);
