@@ -44,10 +44,12 @@ namespace Libplanet.Net
         private static readonly TimeSpan BlockRecvTimeout = TimeSpan.FromSeconds(15);
         private static readonly TimeSpan TxRecvTimeout = TimeSpan.FromSeconds(3);
 
+        private static readonly int MaxDealerCount = 10;
+
         private readonly BlockChain<T> _blockChain;
         private readonly PrivateKey _privateKey;
         private readonly RouterSocket _router;
-        private readonly IDictionary<Peer, DealerSocket> _dealers;
+        private readonly IDictionary<Peer, (DateTimeOffset, DealerSocket)> _dealers;
         private readonly IDictionary<Address, long?> _tips;
         private readonly int _appProtocolVersion;
 
@@ -136,7 +138,7 @@ namespace Libplanet.Net
             BlockReceived = new AsyncAutoResetEvent();
             DifferentVersionPeerEncountered = differentVersionPeerEncountered;
 
-            _dealers = new ConcurrentDictionary<Peer, DealerSocket>();
+            _dealers = new ConcurrentDictionary<Peer, (DateTimeOffset, DealerSocket)>();
             _tips = new ConcurrentDictionary<Address, long?>();
             _router = new RouterSocket();
             _router.Options.RouterHandover = true;
@@ -281,9 +283,9 @@ namespace Libplanet.Net
                     _replyQueue.Dispose();
                     _router.Dispose();
 
-                    foreach (DealerSocket s in _dealers.Values)
+                    foreach ((DateTimeOffset, DealerSocket) pair in _dealers.Values)
                     {
-                        s.Dispose();
+                        pair.Item2.Dispose();
                     }
 
                     _dealers.Clear();
@@ -767,18 +769,7 @@ namespace Libplanet.Net
                 return;
             }
 
-            DealerSocket dealer;
-            if (NeedsNewDealer(peer))
-            {
-                _logger.Debug($"Trying to create a dealer socket...");
-                dealer = await CreateDealerSocket(peer);
-                string address = ToNetMQAddress(peer);
-                dealer.Connect(address);
-            }
-            else
-            {
-                dealer = _dealers[peer];
-            }
+            DealerSocket dealer = await GetDealerSocket(peer);
 
             try
             {
@@ -1754,6 +1745,36 @@ namespace Libplanet.Net
             ReplyMessage(reply);
         }
 
+        private bool IsDifferentProtocolVersion(Peer sender)
+        {
+            return sender.AppProtocolVersion != _appProtocolVersion;
+        }
+
+        private async Task<DealerSocket> GetDealerSocket(Peer peer)
+        {
+            DealerSocket dealer;
+            if (NeedsNewDealer(peer))
+            {
+                _logger.Debug($"Trying to create a dealer socket...");
+                dealer = await CreateDealerSocket(peer);
+                dealer.Options.Linger = _linger;
+                string address = ToNetMQAddress(peer);
+                dealer.Connect(address);
+                if (_dealers.Count >= MaxDealerCount)
+                {
+                    RemoveOldestDealer();
+                }
+
+                _dealers[peer] = (DateTimeOffset.UtcNow, dealer);
+            }
+            else
+            {
+                dealer = _dealers[peer].Item2;
+            }
+
+            return dealer;
+        }
+
         private bool NeedsNewDealer(Peer peer)
         {
             Peer existing = _dealers.Keys
@@ -1774,21 +1795,6 @@ namespace Libplanet.Net
             return false;
         }
 
-        private bool IsDifferentProtocolVersion(Peer sender)
-        {
-            return sender.AppProtocolVersion != _appProtocolVersion;
-        }
-
-        private void CloseDealer(Peer peer)
-        {
-            CheckStarted();
-            if (_dealers.TryGetValue(peer, out DealerSocket dealer))
-            {
-                dealer.Dispose();
-                _dealers.Remove(peer);
-            }
-        }
-
         private async Task<DealerSocket> CreateDealerSocket(Peer peer)
         {
             if (_turnClient != null)
@@ -1796,9 +1802,37 @@ namespace Libplanet.Net
                 await CreatePermission(peer);
             }
 
-            DealerSocket dealer = new DealerSocket();
-            _dealers[peer] = dealer;
-            return dealer;
+            return new DealerSocket();
+        }
+
+        private void RemoveOldestDealer()
+        {
+            _logger.Debug("Too many dealers, removing...");
+            (DateTimeOffset, Peer) oldest = (DateTimeOffset.UtcNow, null);
+            foreach (Peer peer in _dealers.Keys)
+            {
+                if (_dealers[peer].Item1 < oldest.Item1)
+                {
+                    oldest = (_dealers[peer].Item1, peer);
+                }
+            }
+
+            if (oldest.Item2 is null)
+            {
+                throw new SwarmException("Creation time of used dealer must before now.");
+            }
+
+            CloseDealer(oldest.Item2);
+        }
+
+        private void CloseDealer(Peer peer)
+        {
+            CheckStarted();
+            if (_dealers.TryGetValue(peer, out (DateTimeOffset, DealerSocket) pair))
+            {
+                pair.Item2.Dispose();
+                _dealers.Remove(peer);
+            }
         }
 
         private void ReceiveMessage(object sender, NetMQSocketEventArgs e)
