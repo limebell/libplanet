@@ -1233,7 +1233,7 @@ namespace Libplanet.Tests.Net
             try
             {
                 await RunAsync(minerSwarm);
-                await RunAsync(receiverSwarm);
+                await receiverSwarm.PrepareAsync();
                 await receiverSwarm.AddPeersAsync(new[] { minerSwarm.AsPeer }, null);
 
                 await receiverSwarm.PreloadAsync();
@@ -1271,7 +1271,8 @@ namespace Libplanet.Tests.Net
             try
             {
                 await RunAsync(minerSwarm);
-                await receiverSwarm.AddPeersAsync(new[] { minerSwarm.AsPeer }, true);
+                await receiverSwarm.PrepareAsync();
+                await receiverSwarm.AddPeersAsync(new[] { minerSwarm.AsPeer }, null);
 
                 var trustedStateValidators = new[] { minerSwarm.Address }.ToImmutableHashSet();
 
@@ -1392,8 +1393,8 @@ namespace Libplanet.Tests.Net
                 await Task.Delay(100);
             }
 
-            var actualStates = new List<BlockDownloadState>();
-            var progress = new Progress<BlockDownloadState>(state =>
+            var actualStates = new List<PreloadState>();
+            var progress = new Progress<PreloadState>(state =>
             {
                 lock (actualStates)
                 {

@@ -142,7 +142,7 @@ namespace Libplanet.Net.Protocols
                 if (timeoutOccurred)
                 {
                     throw new TimeoutException(
-                        "Timeout exception occurred during BoostrapAsync().");
+                        "Timeout exception occurred during BootstrapAsync().");
                 }
             }
             catch (Exception)

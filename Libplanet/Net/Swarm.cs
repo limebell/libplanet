@@ -60,6 +60,7 @@ namespace Libplanet.Net
 
         private readonly NetMQQueue<Message> _replyQueue;
         private readonly NetMQQueue<Message> _broadcastQueue;
+        private readonly NetMQPoller _poller;
 
         private readonly ILogger _logger;
 
@@ -141,6 +142,7 @@ namespace Libplanet.Net
             _router.Options.RouterHandover = true;
             _replyQueue = new NetMQQueue<Message>();
             _broadcastQueue = new NetMQQueue<Message>();
+            _poller = new NetMQPoller { _router, _replyQueue, _broadcastQueue };
 
             _blockSyncMutex = new AsyncLock();
             _runningMutex = new AsyncLock();
@@ -167,6 +169,10 @@ namespace Libplanet.Net
             string loggerId = _privateKey.PublicKey.ToAddress().ToHex();
             _logger = Log.ForContext<Swarm<T>>()
                 .ForContext("SwarmId", loggerId);
+
+            _router.ReceiveReady += ReceiveMessage;
+            _replyQueue.ReceiveReady += DoReply;
+            _broadcastQueue.ReceiveReady += DoBroadcast;
         }
 
         ~Swarm()
@@ -266,6 +272,11 @@ namespace Libplanet.Net
                     _replyQueue.ReceiveReady -= DoReply;
                     _router.ReceiveReady -= ReceiveMessage;
 
+                    if (_poller.IsRunning)
+                    {
+                        _poller.Dispose();
+                    }
+
                     _broadcastQueue.Dispose();
                     _replyQueue.Dispose();
                     _router.Dispose();
@@ -287,14 +298,14 @@ namespace Libplanet.Net
         public async Task PrepareAsync(
             CancellationToken cancellationToken = default(CancellationToken))
         {
+            if (!(_protocol is null))
+            {
+                throw new SwarmException("Swarm is already prepared.");
+            }
+
             if (Running)
             {
                 throw new SwarmException("Swarm is already running.");
-            }
-
-            if (!(EndPoint is null))
-            {
-                throw new SwarmException("Swarm is already prepared.");
             }
 
             if (_host is null && !(_iceServers is null))
@@ -382,7 +393,7 @@ namespace Libplanet.Net
                 throw new SwarmException("Swarm is already running.");
             }
 
-            if (EndPoint is null)
+            if (_protocol is null)
             {
                 throw new SwarmException("Swarm is not prepared.");
             }
@@ -398,10 +409,8 @@ namespace Libplanet.Net
 
                 var tasks = new List<Task>
                 {
-                    BroadcastMessageAsync(TimeSpan.FromMilliseconds(30), _cancellationToken),
-                    ReceiveMessageAsync(TimeSpan.FromMilliseconds(30), _cancellationToken),
-                    ReplyMessageAsync(TimeSpan.FromMilliseconds(30), _cancellationToken),
                     BroadcastTxAsync(broadcastTxInterval, _cancellationToken),
+                    Task.Run(() => _poller.Run(), _cancellationToken),
                     _protocol.RefreshAsync(_cancellationToken),
                 };
 
@@ -761,6 +770,7 @@ namespace Libplanet.Net
             DealerSocket dealer;
             if (NeedsNewDealer(peer))
             {
+                _logger.Debug($"Trying to create a dealer socket...");
                 dealer = await CreateDealerSocket(peer);
                 string address = ToNetMQAddress(peer);
                 dealer.Connect(address);
@@ -846,6 +856,9 @@ namespace Libplanet.Net
                         }
 
                         _tips[pong.Remote.Address] = pong.TipIndex;
+                        _logger.Debug(
+                            $"Received tip index from [{pong.Remote.Address.ToHex()}] " +
+                            $"is {pong.TipIndex}.");
                     }
 
                     return reply;
@@ -1209,105 +1222,6 @@ namespace Libplanet.Net
                 await Task.Delay(lifetime - TimeSpan.FromMinutes(1), cancellationToken);
                 await Task.WhenAll(
                     Peers.Select(CreatePermission));
-            }
-        }
-
-        private async Task BroadcastMessageAsync(
-            TimeSpan broadcastTxInterval,
-            CancellationToken cancellationToken)
-        {
-            while (!cancellationToken.IsCancellationRequested)
-            {
-                try
-                {
-                    await Task.Delay(broadcastTxInterval, cancellationToken);
-
-                    await Task.Run(
-                        () =>
-                        {
-                            if (_broadcastQueue.Any())
-                            {
-                                NetMQQueueEventArgs<Message> args =
-                                    new NetMQQueueEventArgs<Message>(_broadcastQueue);
-
-                                DoBroadcast(this, args);
-                            }
-                        }, cancellationToken);
-                }
-                catch (TaskCanceledException)
-                {
-                    _logger.Debug("Task is cancelled during BroadcastMessageAsync().");
-                }
-                catch (Exception e)
-                {
-                    _logger.Error(e, "An unexpected exception occured during BroadcastTxAsync()");
-                    throw;
-                }
-            }
-        }
-
-        private async Task ReceiveMessageAsync(
-            TimeSpan broadcastTxInterval,
-            CancellationToken cancellationToken)
-        {
-            while (!cancellationToken.IsCancellationRequested)
-            {
-                try
-                {
-                    await Task.Delay(broadcastTxInterval, cancellationToken);
-
-                    await Task.Run(
-                        () =>
-                        {
-                            if (_router.HasIn)
-                            {
-                                NetMQSocketEventArgs args = new NetMQSocketEventArgs(_router);
-                                ReceiveMessage(this, args);
-                            }
-                        }, cancellationToken);
-                }
-                catch (TaskCanceledException)
-                {
-                    _logger.Debug("Task is cancelled during ReceiveMessageAsync().");
-                }
-                catch (Exception e)
-                {
-                    _logger.Error(e, "An unexpected exception occured during BroadcastTxAsync()");
-                    throw;
-                }
-            }
-        }
-
-        private async Task ReplyMessageAsync(
-            TimeSpan broadcastTxInterval,
-            CancellationToken cancellationToken)
-        {
-            while (!cancellationToken.IsCancellationRequested)
-            {
-                try
-                {
-                    await Task.Delay(broadcastTxInterval, cancellationToken);
-
-                    await Task.Run(
-                        () =>
-                        {
-                            if (_replyQueue.Any())
-                            {
-                                NetMQQueueEventArgs<Message> args =
-                                    new NetMQQueueEventArgs<Message>(_replyQueue);
-                                DoReply(this, args);
-                            }
-                        }, cancellationToken);
-                }
-                catch (TaskCanceledException)
-                {
-                    _logger.Debug("Task is cancelled during ReplyMessageAsync().");
-                }
-                catch (Exception e)
-                {
-                    _logger.Error(e, "An unexpected exception occured during BroadcastTxAsync()");
-                    throw;
-                }
             }
         }
 
@@ -1900,10 +1814,21 @@ namespace Libplanet.Net
                 Message message = Message.Parse(raw, reply: false);
                 _logger.Debug("A message has parsed: {0}", message);
 
-                // it's still async because some method it relies are async yet.
-#pragma warning disable CS4014
-                ProcessMessageAsync(message, _cancellationToken);
-#pragma warning restore CS4014
+                // it's still async because some method it relies are async yet.Task.Run(
+                Task.Run(
+                    async () =>
+                    {
+                        try
+                        {
+                            await ProcessMessageAsync(message, _cancellationToken);
+                        }
+                        catch (Exception exc)
+                        {
+                            _logger.Error("Something went wrong during message parsing: {0}", exc);
+                            throw;
+                        }
+                    },
+                    _cancellationToken);
             }
             catch (InvalidMessageException ex)
             {
@@ -1927,10 +1852,10 @@ namespace Libplanet.Net
             {
                 _logger.Debug($"Broadcasting message [{msg}]");
                 _logger.Debug($"Peers to broadcast : {_protocol.PeersToBroadcast.Count}");
-                foreach (Peer peer in _protocol.PeersToBroadcast)
+                _protocol.PeersToBroadcast.ParallelForEachAsync(async peer =>
                 {
-                    SendMessageAsync(peer, msg).Wait();
-                }
+                    await SendMessageAsync(peer, msg);
+                });
 
                 _logger.Debug($"[{msg}] broadcasting completed.");
             }

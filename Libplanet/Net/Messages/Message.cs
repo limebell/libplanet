@@ -148,8 +148,7 @@ namespace Libplanet.Net.Messages
         {
             if (self is null)
             {
-                // throw new ArgumentNullException(nameof(self));
-                self = new Peer(key.PublicKey, new System.Net.DnsEndPoint("0.0.0.0", 1234));
+                throw new ArgumentNullException(nameof(self));
             }
 
             var message = new NetMQMessage();
