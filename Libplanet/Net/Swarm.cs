@@ -785,12 +785,15 @@ namespace Libplanet.Net
             }
             catch (TimeoutException e)
             {
-                _logger.Error(e, "Timeout occurred during SendMessageAsync()");
+                _logger.Error(e, "Timeout occurred during SendMessageAsync().");
                 throw;
             }
             catch (Exception e)
             {
-                _logger.Error(e, "An unexpected exception occurred during SendMessageAsync()");
+                _logger.Error(
+                    e,
+                    "An unexpected exception occurred during SendMessageAsync(). {0}",
+                    e);
                 throw;
             }
         }
@@ -873,7 +876,8 @@ namespace Libplanet.Net
             {
                 _logger.Error(
                     e,
-                    "An unexpected exception occurred during SendMessageWithReplyAsync().");
+                    "An unexpected exception occurred during SendMessageWithReplyAsync(). {0}",
+                    e);
                 throw;
             }
         }
