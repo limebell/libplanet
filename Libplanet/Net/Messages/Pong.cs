@@ -24,7 +24,7 @@ namespace Libplanet.Net.Messages
 
         public int AppProtocolVersion { get; }
 
-        public long? TipIndex { get; }
+        public long? TipIndex { get; set; }
 
         protected override MessageType Type => MessageType.Pong;
 
