@@ -20,6 +20,7 @@ using Libplanet.Net.Messages;
 using Libplanet.Store;
 using Libplanet.Stun;
 using Libplanet.Tx;
+using LiteDB;
 using NetMQ;
 using NetMQ.Sockets;
 using Nito.AsyncEx;
@@ -49,7 +50,6 @@ namespace Libplanet.Net
         private readonly BlockChain<T> _blockChain;
         private readonly PrivateKey _privateKey;
         private readonly RouterSocket _router;
-        private readonly IDictionary<Address, DealerSocket> _dealers;
         private readonly int _appProtocolVersion;
 
         private readonly TimeSpan _dialTimeout;
@@ -139,7 +139,6 @@ namespace Libplanet.Net
             BlockReceived = new AsyncAutoResetEvent();
             DifferentVersionPeerEncountered = differentVersionPeerEncountered;
 
-            _dealers = new ConcurrentDictionary<Address, DealerSocket>();
             _router = new RouterSocket();
             _router.Options.RouterHandover = true;
             _replyQueue = new NetMQQueue<Message>();
@@ -362,13 +361,6 @@ namespace Libplanet.Net
                     _broadcastQueue.Dispose();
                     _replyQueue.Dispose();
                     _router.Dispose();
-
-                    foreach (DealerSocket s in _dealers.Values)
-                    {
-                        s.Dispose();
-                    }
-
-                    _dealers.Clear();
 
                     Running = false;
                 }
@@ -1779,7 +1771,6 @@ namespace Libplanet.Net
             {
                 // Clear outdated existing peer.
                 _peers.Remove(existing);
-                CloseDealer(existing);
 
                 return true;
             }
@@ -1884,10 +1875,6 @@ namespace Libplanet.Net
                 _logger.Debug(
                     $"Trying to close dealers associated {peer}."
                 );
-                if (Running)
-                {
-                    CloseDealer(peer);
-                }
 
                 var pubKey = peer.PublicKey;
 
@@ -1896,25 +1883,10 @@ namespace Libplanet.Net
                     foreach (Peer key in remains)
                     {
                         _peers.Remove(key);
-
-                        if (Running)
-                        {
-                            CloseDealer(key);
-                        }
                     }
                 }
 
                 _logger.Debug($"Dealers associated {peer} were closed.");
-            }
-        }
-
-        private void CloseDealer(Peer peer)
-        {
-            CheckStarted();
-            if (_dealers.TryGetValue(peer.Address, out DealerSocket dealer))
-            {
-                dealer.Dispose();
-                _dealers.Remove(peer.Address);
             }
         }
 
@@ -1957,56 +1929,50 @@ namespace Libplanet.Net
                 await CreatePermission(peer);
             }
 
-            // We create a new DealerSocket for each DialPeerAsync()
-            // because NetMQ doesn't handle properly previosuly connected sockets.
-            if (_dealers.TryGetValue(peer.Address, out DealerSocket dealer))
-            {
-                dealer.Dispose();
-            }
-
-            dealer = new DealerSocket();
-            dealer.Options.Identity = Address.ToByteArray();
-
             try
             {
-                _logger.Debug($"Trying to DialAsync({peer.EndPoint})...");
-                Pong pong = await DialAsync(
-                    ToNetMQAddress(peer),
-                    dealer,
-                    cancellationToken);
-                _logger.Debug($"DialAsync({peer.EndPoint}) is complete.");
-
-                if (pong.AppProtocolVersion != _appProtocolVersion)
+                using (DealerSocket dealer = new DealerSocket())
                 {
-                    dealer.Dispose();
+                    _logger.Debug($"Trying to DialAsync({peer.EndPoint})...");
+                    Pong pong = await DialAsync(
+                        ToNetMQAddress(peer),
+                        dealer,
+                        cancellationToken);
+                    _logger.Debug($"DialAsync({peer.EndPoint}) is complete.");
 
-                    DifferentProtocolVersionEventArgs args =
-                        new DifferentProtocolVersionEventArgs
-                        {
-                            ExpectedVersion = _appProtocolVersion,
-                            ActualVersion = pong.AppProtocolVersion,
-                        };
+                    if (pong.AppProtocolVersion != _appProtocolVersion)
+                    {
+                        DifferentProtocolVersionEventArgs args =
+                            new DifferentProtocolVersionEventArgs
+                            {
+                                ExpectedVersion = _appProtocolVersion,
+                                ActualVersion = pong.AppProtocolVersion,
+                            };
 
-                    DifferentVersionPeerEncountered?.Invoke(this, args);
+                        DifferentVersionPeerEncountered?.Invoke(this, args);
 
-                    throw new DifferentAppProtocolVersionException(
-                        $"Peer protocol version is different.",
-                        _appProtocolVersion,
-                        pong.AppProtocolVersion);
+                        throw new DifferentAppProtocolVersionException(
+                            $"Peer protocol version is different.",
+                            _appProtocolVersion,
+                            pong.AppProtocolVersion);
+                    }
+
+                    return pong;
                 }
-
-                _dealers[peer.Address] = dealer;
-
-                return pong;
             }
-            catch (IOException)
+            catch (IOException e)
             {
-                dealer.Dispose();
+                _logger.Error(e, "IOException occurred during DialPeerAsync(). {0}", e);
                 throw;
             }
-            catch (TimeoutException)
+            catch (TimeoutException e)
             {
-                dealer.Dispose();
+                _logger.Error(e, "TimeoutException occurred during DialPeerAsync(). {0}", e);
+                throw;
+            }
+            catch (Exception e)
+            {
+                _logger.Error(e, "An unexpected exception occurred during DialPeerAsync(). {0}", e);
                 throw;
             }
         }
@@ -2109,23 +2075,63 @@ namespace Libplanet.Net
             }
         }
 
+        private async Task SendMessageAsync(Peer peer, Message message)
+        {
+            try
+            {
+                if (_turnClient != null)
+                {
+                    await CreatePermission(peer);
+                }
+
+                using (var dealer = new DealerSocket(ToNetMQAddress(peer)))
+                {
+                    dealer.Options.Linger = _linger;
+                    _logger.Debug($"Trying to send [{message}] to [{peer.ToString()}]...");
+
+                    // dealer.SendMultipartMessage(message.ToNetMQMessage(_privateKey, AsPeer));
+                    /*if (!dealer.TrySendMultipartMessage(
+                        TimeSpan.FromSeconds(3),
+                        message.ToNetMQMessage(_privateKey, AsPeer)))
+                    {
+                        throw new TimeoutException();
+                    }*/
+                    await dealer.SendMultipartMessageAsync(
+                        message: message.ToNetMQMessage(_privateKey),
+                        timeout: TimeSpan.FromSeconds(3),
+                        delay: null,
+                        cancellationToken: _cancellationToken);
+                }
+            }
+            catch (TimeoutException e)
+            {
+                _logger.Error(e, "Timeout occurred during SendMessageAsync().");
+                throw;
+            }
+            catch (Exception e)
+            {
+                _logger.Error(
+                    e,
+                    "An unexpected exception occurred during SendMessageAsync(). {0}",
+                    e);
+                throw;
+            }
+        }
+
         private void DoBroadcast(object sender, NetMQQueueEventArgs<Message> e)
         {
             Message msg = e.Queue.Dequeue();
-            NetMQMessage netMQMessage = msg.ToNetMQMessage(_privateKey);
 
             // FIXME Should replace with PUB/SUB model.
             try
             {
                 // FIXME The current timeout value(1 sec) is arbitrary.
                 // We should make this configurable or fix it to an unneeded structure.
-                _dealers.Values.ParallelForEachAsync(async s =>
+                _peers.Keys.ParallelForEachAsync(
+                    async peer =>
                 {
-                    await Task.Run(() =>
-                    {
-                        s.TrySendMultipartMessage(TimeSpan.FromSeconds(1), netMQMessage);
-                    });
-                });
+                    await SendMessageAsync(peer, msg);
+                }, _cancellationToken);
             }
             catch (TimeoutException ex)
             {
