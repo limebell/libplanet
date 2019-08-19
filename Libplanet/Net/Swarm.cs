@@ -20,7 +20,6 @@ using Libplanet.Net.Messages;
 using Libplanet.Store;
 using Libplanet.Stun;
 using Libplanet.Tx;
-using LiteDB;
 using NetMQ;
 using NetMQ.Sockets;
 using Nito.AsyncEx;
@@ -2101,6 +2100,8 @@ namespace Libplanet.Net
                         timeout: TimeSpan.FromSeconds(3),
                         delay: null,
                         cancellationToken: _cancellationToken);
+
+                    await Task.Delay(_linger, _cancellationToken);
                 }
             }
             catch (TimeoutException e)
