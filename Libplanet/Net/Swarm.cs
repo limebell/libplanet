@@ -46,7 +46,6 @@ namespace Libplanet.Net
 
         private readonly BlockChain<T> _blockChain;
         private readonly PrivateKey _privateKey;
-        private readonly RouterSocket _router;
         private readonly int _appProtocolVersion;
 
         private readonly TimeSpan _dialTimeout;
@@ -56,11 +55,12 @@ namespace Libplanet.Net
         private readonly IList<IceServer> _iceServers;
         private readonly TimeSpan _linger;
 
-        private readonly NetMQQueue<Message> _replyQueue;
-        private readonly NetMQQueue<Message> _broadcastQueue;
-        private readonly NetMQPoller _poller;
-
         private readonly ILogger _logger;
+
+        private RouterSocket _router;
+        private NetMQQueue<Message> _replyQueue;
+        private NetMQQueue<Message> _broadcastQueue;
+        private NetMQPoller _poller;
 
         private IDictionary<Address, DateTimeOffset> _permissions;
         private TaskCompletionSource<object> _runningEvent;
@@ -135,12 +135,6 @@ namespace Libplanet.Net
             BlockReceived = new AsyncAutoResetEvent();
             DifferentVersionPeerEncountered = differentVersionPeerEncountered;
 
-            _router = new RouterSocket();
-            _router.Options.RouterHandover = true;
-            _replyQueue = new NetMQQueue<Message>();
-            _broadcastQueue = new NetMQQueue<Message>();
-            _poller = new NetMQPoller { _router, _replyQueue, _broadcastQueue };
-
             _blockSyncMutex = new AsyncLock();
             _runningMutex = new AsyncLock();
 
@@ -168,10 +162,6 @@ namespace Libplanet.Net
             string loggerId = _privateKey.PublicKey.ToAddress().ToHex();
             _logger = Log.ForContext<Swarm<T>>()
                 .ForContext("SwarmId", loggerId);
-
-            _router.ReceiveReady += ReceiveMessage;
-            _replyQueue.ReceiveReady += DoReply;
-            _broadcastQueue.ReceiveReady += DoBroadcast;
         }
 
         ~Swarm()
@@ -300,6 +290,9 @@ namespace Libplanet.Net
                 throw new SwarmException("Swarm is already running.");
             }
 
+            _router = new RouterSocket();
+            _router.Options.RouterHandover = true;
+
             if (_host is null && !(_iceServers is null))
             {
                 _turnClient = await IceServer.CreateTurnClient(_iceServers);
@@ -392,6 +385,14 @@ namespace Libplanet.Net
 
             try
             {
+                _replyQueue = new NetMQQueue<Message>();
+                _broadcastQueue = new NetMQQueue<Message>();
+                _poller = new NetMQPoller { _router, _replyQueue, _broadcastQueue };
+
+                _router.ReceiveReady += ReceiveMessage;
+                _replyQueue.ReceiveReady += DoReply;
+                _broadcastQueue.ReceiveReady += DoBroadcast;
+
                 var tasks = new List<Task>();
                 _logger.Debug("Starting swarm...");
 
