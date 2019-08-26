@@ -8,6 +8,8 @@ To be released.
 
 ### Backward-incompatible interface changes
 
+ -  Removed `Swarm<T>.AddPeersAsync()` method. To connect with seed peers, use
+    `Swarm<T>.BootstrapAsync()` method instead.  [[#353]]
  -  `IStore.StoreStateReference<T>(string, IImmutableSet<Address>, Block<T>)`
     method became replaced by
     `StoreStateReference(string, IImmutableSet<Address>, HashDigest<SHA256>, long)`
@@ -31,7 +33,19 @@ To be released.
 
 ### Added interfaces
 
+ -  Added `Swarm<T>.PrepareAsync()` method. The method should be called before
+    calling `Swarm<T>.BootstrapAsync()`, `Swarm<T>.PreloadAsync()` and
+    `Swarm<T>.StartAsync()`.  [[#353]]
+ -  Added `Swarm<T>.BootstrapAsync()` method to connect with seed peers.  [[#353]]
+
 ### Behavioral changes
+
+ -  NetMQ instances are now initialized at `Swarm<T>.StartAsync()` instead of
+    `Swarm<T>()`.  [[#353]]
+ -  Peers now connected via [Kademlia protocol][Kademlia]. Peers are now selectively
+    connected to each peer.  [[#353]]
+ -  TxIds and Blocks are now broadcasted to selected peers from routing table of
+    the host peer.  [[#353]]
 
 ### Bug fixes
 
@@ -61,6 +75,10 @@ Released on August 28, 2019.
 [#457]: https://github.com/planetarium/libplanet/issues/457
 [#466]: https://github.com/planetarium/libplanet/pull/466
 [#468]: https://github.com/planetarium/libplanet/pull/468
+
+
+[#353]: https://github.com/planetarium/libplanet/pull/353
+[Kademlia]: https://en.wikipedia.org/wiki/Kademlia
 
 
 Version 0.5.0
@@ -129,8 +147,8 @@ Released on August 22, 2019.
  -  `BlockChain<T>.MineBlock()` and `BlockChain<T>.GetNextTxNonce()` methods
     became to ignore transactions that didn't follow `Transaction<T>.Nonce`
     sequentially and treat them as pendings.  [[#365]]
- - `BlockChain<T>` became to evaluate `IBlockPolicy<T>.BlockAction` and set the
-   state when a block is appended to the chain.  [[#319], [#367]]
+ -  `BlockChain<T>` became to evaluate `IBlockPolicy<T>.BlockAction` and set the
+    state when a block is appended to the chain.  [[#319], [#367]]
  -  `BlockSet<T>.ContainsKey()` and `TransactionSet<T>.ContainsKey()` methods
     became O(1) time complexity through omitting iteration and relying
     own retrieve implementations.  [[#390]]
