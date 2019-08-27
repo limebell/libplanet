@@ -441,7 +441,10 @@ namespace Libplanet.Net
 
                 tasks.Add(BroadcastTxAsync(broadcastTxInterval, _cancellationToken));
                 tasks.Add(Task.Run(() => _poller.Run(), _cancellationToken));
-                tasks.Add(_protocol.RefreshAsync(_cancellationToken));
+                tasks.Add(
+                    _protocol.RefreshTableAsync(TimeSpan.FromSeconds(5), _cancellationToken));
+                tasks.Add(
+                    _protocol.RebuildConnectionAsync(TimeSpan.FromMinutes(30), _cancellationToken));
                 _logger.Debug("Swarm started.");
 
                 await await Task.WhenAny(tasks);
@@ -720,7 +723,9 @@ namespace Libplanet.Net
             }
         }
 
-        internal string TraceTable()
+        // FIXME: This method became public just for testing
+#pragma warning disable SA1202
+        public string TraceTable()
         {
             if (_protocol is null)
             {
@@ -731,6 +736,7 @@ namespace Libplanet.Net
                 return _protocol.Trace();
             }
         }
+#pragma warning restore SA1202
 
         internal async Task AddPeersAsync(
             IEnumerable<Peer> peers,

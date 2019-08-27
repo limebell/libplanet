@@ -18,8 +18,9 @@ namespace Libplanet.Net.Protocols
         private const int FindConcurrency = 3;
 
         // FIXME: This should be configurable?
-        private static readonly TimeSpan RequestTimeout = TimeSpan.FromMilliseconds(3 * 1000);
-        private static readonly TimeSpan IdleBucketRefreshInterval = TimeSpan.FromMinutes(30);
+        private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(5);
+        private static readonly TimeSpan IdleRefreshInterval = TimeSpan.FromSeconds(5);
+        private static readonly TimeSpan IdleRebuildInterval = TimeSpan.FromMinutes(30);
 
         private readonly Swarm<T> _swarm;
         private readonly Address _address;
@@ -129,11 +130,34 @@ namespace Libplanet.Net.Protocols
             }
         }
 
-        public async Task RefreshAsync(CancellationToken cancellationToken)
+        public async Task RefreshTableAsync(
+            TimeSpan? period,
+            CancellationToken cancellationToken)
         {
             while (!cancellationToken.IsCancellationRequested)
             {
-                await Task.Delay(IdleBucketRefreshInterval, cancellationToken);
+                await Task.Delay(period ?? IdleRefreshInterval, cancellationToken);
+
+                List<Task> tasks = PeersToBroadcast.Select(
+                    peer => PingAsync(peer, RequestTimeout, cancellationToken)).ToList();
+
+                try
+                {
+                    await Task.WhenAll(tasks);
+                }
+                catch (TimeoutException)
+                {
+                }
+            }
+        }
+
+        public async Task RebuildConnectionAsync(
+            TimeSpan? period,
+            CancellationToken cancellationToken)
+        {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                await Task.Delay(period ?? IdleRebuildInterval, cancellationToken);
 
                 var buffer = new byte[20];
                 var tasks = new List<Task>();
