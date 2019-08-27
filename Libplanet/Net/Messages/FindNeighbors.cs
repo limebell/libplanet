@@ -3,21 +3,22 @@ using NetMQ;
 
 namespace Libplanet.Net.Messages
 {
-    internal class FindPeer : Message
+    internal class FindNeighbors : Message
     {
-        public FindPeer(Address target)
+        // TODO: This message may request exact peer instead of its neighbors.
+        public FindNeighbors(Address target)
         {
             Target = target;
         }
 
-        public FindPeer(NetMQFrame[] body)
+        public FindNeighbors(NetMQFrame[] body)
         {
             Target = new Address(body[0].ToByteArray());
         }
 
         public Address Target { get; }
 
-        protected override MessageType Type => MessageType.FindPeer;
+        protected override MessageType Type => MessageType.FindNeighbors;
 
         protected override IEnumerable<NetMQFrame> DataFrames
         {

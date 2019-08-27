@@ -60,12 +60,12 @@ namespace Libplanet.Net.Messages
             /// <summary>
             /// Message containing request for nearby peers.
             /// </summary>
-            FindPeer = 0x11,
+            FindNeighbors = 0x11,
 
             /// <summary>
             /// Message containing nearby peers.
             /// </summary>
-            Neighbours = 0x12,
+            Neighbors = 0x12,
 
             /// <summary>
             /// Request to query calculated states.
@@ -114,8 +114,8 @@ namespace Libplanet.Net.Messages
                 { MessageType.GetTxs, typeof(GetTxs) },
                 { MessageType.Blocks, typeof(Blocks) },
                 { MessageType.Tx, typeof(Tx) },
-                { MessageType.FindPeer, typeof(FindPeer) },
-                { MessageType.Neighbours, typeof(Neighbours) },
+                { MessageType.FindNeighbors, typeof(FindNeighbors) },
+                { MessageType.Neighbors, typeof(Neighbors) },
                 { MessageType.GetRecentStates, typeof(GetRecentStates) },
                 { MessageType.RecentStates, typeof(RecentStates) },
             };
@@ -133,7 +133,7 @@ namespace Libplanet.Net.Messages
             if (!message.Remote.PublicKey.Verify(body.ToByteArray(), signature))
             {
                 throw new InvalidMessageException(
-                    "the message signature is invalid"
+                    "The message signature is invalid"
                 );
             }
 
@@ -178,7 +178,6 @@ namespace Libplanet.Net.Messages
             var formatter = new BinaryFormatter();
             using (MemoryStream stream = new MemoryStream(bytes))
             {
-                stream.Seek(0, SeekOrigin.Begin);
                 return (Peer)formatter.Deserialize(stream);
             }
         }

@@ -23,6 +23,16 @@ namespace Libplanet.Net.Protocols
             int bucketSize,
             Random random)
         {
+            if (tableSize <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(tableSize));
+            }
+
+            if (bucketSize <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(bucketSize));
+            }
+
             _address = address;
             _tableSize = tableSize;
             _bucketSize = bucketSize;
@@ -37,36 +47,21 @@ namespace Libplanet.Net.Protocols
             _bucketMutex = new AsyncLock();
         }
 
-        public int Count
+        public int Count => _buckets.Sum(bucket => bucket.Count);
+
+        public IEnumerable<KBucket> NonFullBuckets
         {
             get
             {
-                return _buckets.Sum(bucket => bucket.Count);
+                return _buckets.Where(bucket => !bucket.IsFull());
             }
         }
 
-        public List<KBucket> NonFullBuckets
+        public IEnumerable<KBucket> NonEmptyBuckets
         {
             get
             {
-                return _buckets.Where(bucket => !bucket.Full()).ToList();
-            }
-        }
-
-        public List<KBucket> NonEmptyBuckets
-        {
-            get
-            {
-                var buckets = new List<KBucket>();
-                foreach (KBucket bucket in _buckets)
-                {
-                    if (!bucket.Empty())
-                    {
-                        buckets.Add(bucket);
-                    }
-                }
-
-                return buckets;
+                return _buckets.Where(bucket => !bucket.IsEmpty());
             }
         }
 
@@ -79,8 +74,7 @@ namespace Libplanet.Net.Protocols
 
             if (peer.Address.Equals(_address))
             {
-                throw new ArgumentException(
-                    $"Cannot add self to routing table");
+                throw new ArgumentException("Cannot add self to routing table.");
             }
 
             int index = GetBucketIndexOf(peer);
@@ -99,14 +93,12 @@ namespace Libplanet.Net.Protocols
         {
             if (peer is null)
             {
-                Log.Debug($"Remove Peer null argument exception [{peer}]");
                 throw new ArgumentNullException(nameof(peer));
             }
 
             if (peer.Address.Equals(_address))
             {
-                throw new ArgumentException(
-                    $"Cannot remove self from routing table");
+                throw new ArgumentException("Cannot remove self from routing table.");
             }
 
             int index = GetBucketIndexOf(peer);
@@ -146,27 +138,19 @@ namespace Libplanet.Net.Protocols
             }
         }
 
-        public ICollection<Peer> Neighbours(Peer target, int k)
+        public ICollection<Peer> Neighbors(Peer target, int k)
         {
-            return Neighbours(target.Address, k);
+            return Neighbors(target.Address, k);
         }
 
         // returns k nearest peers to given parameter peer from routing table.
         // return value is already sorted with respect to target.
-        public ICollection<Peer> Neighbours(Address target, int k)
+        public ICollection<Peer> Neighbors(Address target, int k)
         {
-            var sorted = new List<Peer>();
-            foreach (KBucket bucket in _buckets)
-            {
-                if (bucket.Empty())
-                {
-                    continue;
-                }
-                else
-                {
-                    sorted.AddRange(bucket.Peers);
-                }
-            }
+            var sorted = _buckets
+                .Where(b => !b.IsEmpty())
+                .SelectMany(b => b.Peers)
+                .ToList();
 
             sorted = Kademlia.SortByDistance(sorted, target);
             var peers = new List<Peer>();
@@ -185,7 +169,7 @@ namespace Libplanet.Net.Protocols
         private int GetBucketIndexOf(Peer peer)
         {
             int plength = Kademlia.CommonPrefixLength(peer.Address, _address);
-            return plength > _tableSize - 1 ? _tableSize - 1 : plength;
+            return Math.Min(plength, _tableSize - 1);
         }
     }
 }

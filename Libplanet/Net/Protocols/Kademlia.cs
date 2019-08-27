@@ -34,7 +34,7 @@ namespace Libplanet.Net.Protocols
                 {
                     if ((mask & x) != 0)
                     {
-                        goto done;
+                        return length;
                     }
 
                     length++;
@@ -42,7 +42,6 @@ namespace Libplanet.Net.Protocols
                 }
             }
 
-            done:
             return length;
         }
 

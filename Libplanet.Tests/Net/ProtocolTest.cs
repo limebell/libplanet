@@ -1,6 +1,7 @@
 using System;
 using System.Net;
 using System.Threading.Tasks;
+using Libplanet.Action;
 using Libplanet.Crypto;
 using Libplanet.Net;
 using Libplanet.Net.Protocols;
@@ -12,6 +13,51 @@ namespace Libplanet.Tests.Net
     {
         private const int BucketSize = 16;
         private const int TableSize = Address.Size * sizeof(byte) * 8;
+
+        [Fact]
+        public void BucketTest()
+        {
+            var bucket = new KBucket(4, new System.Random());
+            var peer1 = new Peer(
+                new PrivateKey().PublicKey,
+                new DnsEndPoint("0.0.0.0", 1234),
+                null);
+            var peer2 = new Peer(
+                new PrivateKey().PublicKey,
+                new DnsEndPoint("0.0.0.0", 1234),
+                null);
+            var peer3 = new Peer(
+                new PrivateKey().PublicKey,
+                new DnsEndPoint("0.0.0.0", 1234),
+                null);
+            var peer4 = new Peer(
+                new PrivateKey().PublicKey,
+                new DnsEndPoint("0.0.0.0", 1234),
+                null);
+            var peer5 = new Peer(
+                new PrivateKey().PublicKey,
+                new DnsEndPoint("0.0.0.0", 1234),
+                null);
+
+            Assert.True(bucket.IsEmpty());
+            Assert.Null(bucket.AddPeer(peer1));
+            Assert.True(bucket.Contains(peer1));
+            Assert.False(bucket.Contains(peer2));
+            Assert.False(bucket.IsEmpty());
+            Assert.False(bucket.IsFull());
+            Assert.Null(bucket.AddPeer(peer2));
+            Assert.Null(bucket.AddPeer(peer3));
+            Assert.Null(bucket.AddPeer(peer4));
+            Assert.True(bucket.IsFull());
+            Assert.Contains(
+                bucket.GetRandomPeer(),
+                new[] { peer1, peer2, peer3, peer4 });
+            Assert.Equal(peer1, bucket.AddPeer(peer5));
+            Assert.True(bucket.Contains(peer1));
+            Assert.False(bucket.Contains(peer5));
+            bucket.Clear();
+            Assert.True(bucket.IsEmpty());
+        }
 
         [Fact]
         public async Task AddSelf()

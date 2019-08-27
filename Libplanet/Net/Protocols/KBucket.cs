@@ -26,10 +26,10 @@ namespace Libplanet.Net.Protocols
         public int Count => _peers.Count;
 
         // get most recently used peer.
-        public Peer Head => Empty() ? null : _peers[_peers.Count - 1];
+        public Peer Head => IsEmpty() ? null : _peers[_peers.Count - 1];
 
         // get least recently used peer.
-        public Peer Tail => Empty() ? null : _peers[0];
+        public Peer Tail => IsEmpty() ? null : _peers[0];
 
         public ImmutableList<Peer> Peers => _peers.ToImmutableList();
 
@@ -50,7 +50,7 @@ namespace Libplanet.Net.Protocols
                 _peers.Add(peer);
                 return null;
             }
-            else if (Full())
+            else if (IsFull())
             {
                 return Tail;
             }
@@ -77,12 +77,12 @@ namespace Libplanet.Net.Protocols
             return _peers.Remove(peer);
         }
 
-        public bool Empty()
+        public bool IsEmpty()
         {
             return _peers.Count == 0;
         }
 
-        public bool Full()
+        public bool IsFull()
         {
             return _peers.Count >= _size;
         }

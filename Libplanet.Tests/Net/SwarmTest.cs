@@ -115,12 +115,8 @@ namespace Libplanet.Tests.Net
         {
             Swarm<DumbAction> swarm = _swarms[0];
 
-            Task t = swarm.StartAsync();
-
+            await Assert.ThrowsAsync<SwarmException>(() => swarm.StartAsync());
             Assert.False(swarm.Running);
-            Assert.True(t.IsFaulted);
-            Assert.IsType<SwarmException>(t.Exception.InnerException);
-
             await swarm.StopAsync();
         }
 
@@ -145,7 +141,7 @@ namespace Libplanet.Tests.Net
         }
 
         [Fact(Timeout = Timeout)]
-        public async Task CanHandleReconnection()
+        public async Task HandleReconnection()
         {
             Swarm<DumbAction> seed = new Swarm<DumbAction>(
                 blockChain: _blockchains[0],
@@ -189,7 +185,7 @@ namespace Libplanet.Tests.Net
         }
 
         [Fact(Timeout = Timeout)]
-        public async Task CanBroadcastBlockToReconnectedPeer()
+        public async Task BroadcastBlockToReconnectedPeer()
         {
             BlockChain<DumbAction> chainWithBlocks = _blockchains[0];
             Swarm<DumbAction> seed = new Swarm<DumbAction>(
@@ -1621,8 +1617,8 @@ namespace Libplanet.Tests.Net
             CancellationToken cancellationToken = default
         )
         {
-            await swarm.PrepareAsync(cancellationToken);
-            Task task = swarm.StartAsync(200);
+            await swarm.PrepareAsync();
+            Task task = swarm.StartAsync(200, cancellationToken);
             await swarm.WaitForRunningAsync();
             return task;
         }

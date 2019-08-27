@@ -26,7 +26,6 @@ namespace Libplanet.Net.Protocols
         private readonly int _appProtocolVersion;
         private readonly System.Random _random;
         private readonly RoutingTable _routing;
-        private readonly CancellationToken _cancellationToken;
 
         private readonly ILogger _logger;
 
@@ -34,12 +33,10 @@ namespace Libplanet.Net.Protocols
             Swarm<T> swarm,
             Address address,
             int appProtocolVersion,
-            CancellationToken cancellationToken,
             ILogger logger)
         {
             _swarm = swarm;
             _appProtocolVersion = appProtocolVersion;
-            _cancellationToken = cancellationToken;
             _logger = logger;
 
             _address = address;
@@ -161,7 +158,7 @@ namespace Libplanet.Net.Protocols
             }
         }
 
-#pragma warning disable CS4014 // 이 호출을 대기하지 않으므로 호출이 완료되기 전에 현재 메서드가 계속 실행됩니다.
+#pragma warning disable CS4014
         public void ReceiveMessage(object sender, Message message)
         {
             switch (message)
@@ -170,16 +167,16 @@ namespace Libplanet.Net.Protocols
                     ReceivePingAsync(ping);
                     break;
 
-                case FindPeer findPeer:
+                case FindNeighbors findPeer:
                     ReceiveFindPeerAsync(findPeer);
                     break;
 
                 default:
-                    UpdateAsync(message.Remote, _cancellationToken);
+                    UpdateAsync(message.Remote);
                     break;
             }
         }
-#pragma warning restore CS4014 // 이 호출을 대기하지 않으므로 호출이 완료되기 전에 현재 메서드가 계속 실행됩니다.
+#pragma warning restore CS4014
 
         public string Trace()
         {
@@ -187,7 +184,7 @@ namespace Libplanet.Net.Protocols
             trace += $"Routing table of [{_address.ToHex()}]";
             for (var i = 0; i < TableSize; i++)
             {
-                if (_routing.BucketOf(i).Empty())
+                if (_routing.BucketOf(i).IsEmpty())
                 {
                     continue;
                 }
@@ -225,13 +222,13 @@ namespace Libplanet.Net.Protocols
                     timeout,
                     cancellationToken) is Pong pong))
                 {
-                    throw new Exception(
+                    throw new InvalidMessageException(
                         "Received pong is invalid.");
                 }
 
                 if (pong.Remote.Address.Equals(_address))
                 {
-                    throw new Exception(
+                    throw new InvalidMessageException(
                         "Cannot receive pong from self");
                 }
 
@@ -247,10 +244,6 @@ namespace Libplanet.Net.Protocols
             {
                 _logger.Debug("Different AppProtocolVersion encountered at PingAsync.");
             }
-            catch (Exception)
-            {
-                throw;
-            }
         }
 
         // This updates routing table when receiving a message.
@@ -264,11 +257,6 @@ namespace Libplanet.Net.Protocols
             if (peer is null)
             {
                 throw new ArgumentNullException(nameof(peer));
-            }
-
-            if (cancellationToken == default(CancellationToken))
-            {
-                cancellationToken = _cancellationToken;
             }
 
             if (cancellationToken.IsCancellationRequested)
@@ -302,20 +290,21 @@ namespace Libplanet.Net.Protocols
                     await _routing.AddPeerAsync(evictionCandidate);
                 }
             }
-
-            /*foreach (KBucket bucket in _routing.NonFullBuckets)
-            {
-                foreach (Peer replacement in bucket.ReplacementCache)
-                {
-                    await PingAsync(replacement);
-                }
-            }*/
         }
 
         private async Task RemovePeerAsync(Peer peer)
         {
             _logger.Debug($"Removing peer [{peer.Address.ToHex()}] from table.");
             await _routing.RemovePeerAsync(peer);
+
+            foreach (KBucket bucket in _routing.NonFullBuckets)
+            {
+                foreach (Peer replacement in bucket.ReplacementCache)
+                {
+                    // FIXME: appropriate cancellation token required.
+                    await PingAsync(replacement, RequestTimeout, CancellationToken.None);
+                }
+            }
         }
 
         private async Task FindPeerAsync(
@@ -327,31 +316,31 @@ namespace Libplanet.Net.Protocols
             ImmutableList<Peer> found;
             if (viaPeer is null)
             {
-                found = await QueryNeighboursAsync(target, timeout, cancellationToken);
+                found = await QueryNeighborsAsync(target, timeout, cancellationToken);
             }
             else
             {
-                found = await GetNeighbours(viaPeer, target, timeout, cancellationToken);
+                found = await GetNeighbors(viaPeer, target, timeout, cancellationToken);
             }
 
             await ProcessFoundAsync(found, target, timeout, cancellationToken);
         }
 
-        private async Task<ImmutableList<Peer>> QueryNeighboursAsync(
+        private async Task<ImmutableList<Peer>> QueryNeighborsAsync(
             Address target,
             TimeSpan? timeout,
             CancellationToken cancellationToken)
         {
-            List<Peer> neighbours = _routing.Neighbours(target, BucketSize).ToList();
+            List<Peer> neighbors = _routing.Neighbors(target, BucketSize).ToList();
             var found = new List<Peer>();
-            int count = neighbours.Count < FindConcurrency ? neighbours.Count : FindConcurrency;
+            int count = neighbors.Count < FindConcurrency ? neighbors.Count : FindConcurrency;
             bool timeoutOccurred = true;
             for (int i = 0; i < count; i++)
             {
                 try
                 {
                     found.AddRange(
-                        await GetNeighbours(neighbours[i], target, timeout, cancellationToken));
+                        await GetNeighbors(neighbors[i], target, timeout, cancellationToken));
                     timeoutOccurred = false;
                 }
                 catch (TimeoutException)
@@ -362,32 +351,33 @@ namespace Libplanet.Net.Protocols
 
             if (count != 0 && timeoutOccurred)
             {
-                _logger.Debug("Timeout occurred during QueryNeighboursAsync().");
-                throw new TimeoutException("Timeout occurred during QueryNeighboursAsync().");
+                _logger.Debug($"Timeout occurred during {nameof(QueryNeighborsAsync)}.");
+                throw new TimeoutException(
+                    $"Timeout occurred during {nameof(QueryNeighborsAsync)}.");
             }
 
             return found.ToImmutableList();
         }
 
-        private async Task<ImmutableList<Peer>> GetNeighbours(
+        private async Task<ImmutableList<Peer>> GetNeighbors(
             Peer addressee,
             Address target,
             TimeSpan? timeout,
             CancellationToken cancellationToken)
         {
-            FindPeer findPeer = new FindPeer(target);
+            var findPeer = new FindNeighbors(target);
             try
             {
                 if (!(await _swarm.SendMessageWithReplyAsync(
                     addressee,
                     findPeer,
                     timeout,
-                    cancellationToken) is Neighbours neighbours))
+                    cancellationToken) is Neighbors neighbors))
                 {
-                    throw new SwarmException("Reply of FindPeer is invalid.");
+                    throw new InvalidMessageException("Reply of FindNeighbors is invalid.");
                 }
 
-                return neighbours.Found.ToImmutableList();
+                return neighbors.Found.ToImmutableList();
             }
             catch (TimeoutException)
             {
@@ -421,24 +411,18 @@ namespace Libplanet.Net.Protocols
             TimeSpan? timeout,
             CancellationToken cancellationToken)
         {
-            var peers = new List<Peer>();
-            foreach (Peer peer in found)
-            {
-                if (!peer.Address.Equals(_address) && !_routing.Contains(peer))
-                {
-                    peers.Add(peer);
-                }
-            }
+            List<Peer> peers = found.Where(
+                peer => !peer.Address.Equals(_address) && !_routing.Contains(peer)).ToList();
 
             if (peers.Count == 0)
             {
-                _logger.Debug("No any neighbour received.");
+                _logger.Debug("No any neighbor received.");
                 return;
             }
 
             peers = Kademlia.SortByDistance(peers, target);
 
-            List<Peer> closestCandidate = _routing.Neighbours(target, BucketSize).ToList();
+            List<Peer> closestCandidate = _routing.Neighbors(target, BucketSize).ToList();
 
             bool foundPingTimeout = true;
             foreach (Peer peer in peers)
@@ -457,7 +441,7 @@ namespace Libplanet.Net.Protocols
 
             if (foundPingTimeout)
             {
-                _logger.Debug("All neighbours found are invalid.");
+                _logger.Debug("All neighbors found are invalid.");
                 throw new TimeoutException();
             }
 
@@ -492,17 +476,17 @@ namespace Libplanet.Net.Protocols
 
         // FIXME: this method is not safe from amplification attack
         // maybe ping/pong/ping/pong is required
-        private async Task ReceiveFindPeerAsync(FindPeer findPeer)
+        private async Task ReceiveFindPeerAsync(FindNeighbors findNeighbors)
         {
-            await UpdateAsync(findPeer.Remote);
-            List<Peer> found = _routing.Neighbours(findPeer.Target, BucketSize).ToList();
+            await UpdateAsync(findNeighbors.Remote);
+            List<Peer> found = _routing.Neighbors(findNeighbors.Target, BucketSize).ToList();
 
-            Neighbours neighbours = new Neighbours(found)
+            Neighbors neighbors = new Neighbors(found)
             {
-                Identity = findPeer.Identity,
+                Identity = findNeighbors.Identity,
             };
 
-            _swarm.ReplyMessage(neighbours);
+            _swarm.ReplyMessage(neighbors);
         }
     }
 }

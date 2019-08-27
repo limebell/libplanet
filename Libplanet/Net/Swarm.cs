@@ -294,8 +294,13 @@ namespace Libplanet.Net
             _logger.Debug("Stopped.");
         }
 
-        public async Task PrepareAsync(
-            CancellationToken cancellationToken = default(CancellationToken))
+        /// <summary>
+        /// Prepare <see cref="Swarm{T}"/> so this can bootstrap, preload and start.
+        /// </summary>
+        /// <returns>An awaitable task without value.</returns>
+        /// <exception cref="SwarmException">Thrown when this <see cref="Swarm{T}"/> instance is
+        /// already prepared or <see cref="Running"/>.</exception>
+        public async Task PrepareAsync()
         {
             if (!(_protocol is null))
             {
@@ -326,12 +331,6 @@ namespace Libplanet.Net
 
             _logger.Information($"Listen on {_listenPort}");
 
-            _workerCancellationTokenSource = new CancellationTokenSource();
-            CancellationToken workerCancellationToken =
-                CancellationTokenSource.CreateLinkedTokenSource(
-                    _workerCancellationTokenSource.Token, cancellationToken
-                ).Token;
-            _cancellationToken = workerCancellationToken;
             _behindNAT = false;
 
             if (!(_turnClient is null))
@@ -360,15 +359,16 @@ namespace Libplanet.Net
                 this,
                 _privateKey.PublicKey.ToAddress(),
                 _appProtocolVersion,
-                _cancellationToken,
                 _logger);
         }
 
         public async Task StartAsync(
-            int millisecondsBroadcastTxInterval = 5000)
+            int millisecondsBroadcastTxInterval = 5000,
+            CancellationToken cancellationToken = default(CancellationToken))
         {
             await StartAsync(
-                TimeSpan.FromMilliseconds(millisecondsBroadcastTxInterval)
+                TimeSpan.FromMilliseconds(millisecondsBroadcastTxInterval),
+                cancellationToken
             );
         }
 
@@ -376,6 +376,10 @@ namespace Libplanet.Net
         /// Starts to periodically synchronize the <see cref="BlockChain"/>.
         /// </summary>
         /// <param name="broadcastTxInterval">The time period of exchange of staged transactions.
+        /// </param>
+        /// /// <param name="cancellationToken">
+        /// A cancellation token used to propagate notification that this
+        /// operation should be canceled.
         /// </param>
         /// <returns>An awaitable task without value.</returns>
         /// <exception cref="SwarmException">Thrown when this <see cref="Swarm{T}"/> instance is
@@ -388,7 +392,9 @@ namespace Libplanet.Net
         /// these actions in the behind blocks use <see cref=
         /// "PreloadAsync(IProgress{PreloadState}, IImmutableSet{Address}, CancellationToken)"
         /// /> method too.</remarks>
-        public async Task StartAsync(TimeSpan broadcastTxInterval)
+        public async Task StartAsync(
+            TimeSpan broadcastTxInterval,
+            CancellationToken cancellationToken = default(CancellationToken))
         {
             if (Running)
             {
@@ -402,6 +408,13 @@ namespace Libplanet.Net
 
             try
             {
+                _workerCancellationTokenSource = new CancellationTokenSource();
+                CancellationToken workerCancellationToken =
+                    CancellationTokenSource.CreateLinkedTokenSource(
+                        _workerCancellationTokenSource.Token, cancellationToken
+                    ).Token;
+
+                _cancellationToken = workerCancellationToken;
                 _replyQueue = new NetMQQueue<Message>();
                 _broadcastQueue = new NetMQQueue<Message>();
                 _poller = new NetMQPoller { _router, _replyQueue, _broadcastQueue };
@@ -466,7 +479,7 @@ namespace Libplanet.Net
         /// </summary>
         /// <param name="seedPeers">List of seed peers.</param>
         /// <param name="pingSeedTimeout">Timeout for connecting to seed peers.</param>
-        /// <param name="findPeerTimeout">Timeout for requesting neighbours.</param>
+        /// <param name="findNeighborsTimeout">Timeout for requesting neighbors.</param>
         /// <param name="cancellationToken">A cancellation token used to propagate notification
         /// that this operation should be canceled.</param>
         /// <returns>An awaitable task without value.</returns>
@@ -475,7 +488,7 @@ namespace Libplanet.Net
         public async Task BootstrapAsync(
             IEnumerable<Peer> seedPeers,
             TimeSpan? pingSeedTimeout,
-            TimeSpan? findPeerTimeout,
+            TimeSpan? findNeighborsTimeout,
             CancellationToken cancellationToken = default(CancellationToken))
         {
             if (seedPeers is null)
@@ -483,15 +496,10 @@ namespace Libplanet.Net
                 throw new ArgumentNullException(nameof(seedPeers));
             }
 
-            if (cancellationToken == default(CancellationToken))
-            {
-                cancellationToken = _cancellationToken;
-            }
-
             await _protocol.BootstrapAsync(
                 seedPeers.ToImmutableList(),
                 pingSeedTimeout,
-                findPeerTimeout,
+                findNeighborsTimeout,
                 cancellationToken);
         }
 
@@ -538,7 +546,7 @@ namespace Libplanet.Net
         /// </returns>
         /// <remarks>This does not render downloaded <see cref="IAction"/>s, but fills states only.
         /// If you want to render all <see cref="IAction"/>s from the genesis block to the recent
-        /// blocks use <see cref="StartAsync(TimeSpan)"/> method
+        /// blocks use <see cref="StartAsync(TimeSpan, CancellationToken)"/> method
         /// instead.</remarks>
         public Task PreloadAsync(
             IProgress<PreloadState> progress = null,
@@ -1365,9 +1373,9 @@ namespace Libplanet.Net
                         break;
                     }
 
-                case FindPeer findPeer:
+                case FindNeighbors findPeer:
                     {
-                        _logger.Debug($"FindPeer received.");
+                        _logger.Debug($"FindNeighbors received.");
                         _protocol.ReceiveMessage(this, findPeer);
                         break;
                     }
