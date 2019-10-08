@@ -13,21 +13,14 @@ namespace Libplanet.Net.Protocols
     internal class KademliaProtocol<T> : IProtocol
         where T : IAction, new()
     {
-        private const int BucketSize = 16;
-        private const int TableSize = Address.Size * sizeof(byte) * 8;
-        private const int FindConcurrency = 3;
-        private const int MaxDepth = 3;
-
-        // FIXME: This should be configurable?
-        private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(5);
-        private static readonly TimeSpan IdleRefreshInterval = TimeSpan.FromSeconds(5);
-        private static readonly TimeSpan IdleRebuildInterval = TimeSpan.FromMinutes(30);
-
+        private readonly TimeSpan _requestTimeout;
         private readonly Swarm<T> _swarm;
         private readonly Address _address;
         private readonly int _appProtocolVersion;
         private readonly System.Random _random;
         private readonly RoutingTable _routing;
+        private readonly int _tableSize;
+        private readonly int _bucketSize;
 
         private readonly ILogger _logger;
 
@@ -35,7 +28,10 @@ namespace Libplanet.Net.Protocols
             Swarm<T> swarm,
             Address address,
             int appProtocolVersion,
-            ILogger logger)
+            ILogger logger,
+            int? tableSize,
+            int? bucketSize,
+            TimeSpan? requestTimeout = null)
         {
             _swarm = swarm;
             _appProtocolVersion = appProtocolVersion;
@@ -43,8 +39,10 @@ namespace Libplanet.Net.Protocols
 
             _address = address;
             _random = new System.Random();
-            _routing = new RoutingTable(
-                _address, TableSize, BucketSize, _random);
+            _tableSize = tableSize ?? Kademlia.TableSize;
+            _bucketSize = bucketSize ?? Kademlia.BucketSize;
+            _routing = new RoutingTable(_address, _tableSize, _bucketSize, _random);
+            _requestTimeout = requestTimeout ?? Kademlia.IdleRequestTimeout;
         }
 
         public int Count => _routing.Count;
@@ -155,24 +153,23 @@ namespace Libplanet.Net.Protocols
         /// Periodically checks whether <see cref="Peer"/>s in <see cref="RoutingTable"/> is
         /// online by sending <see cref="Ping"/>.
         /// </summary>
-        /// <param name="period">The cycle in which the operation is executed. If null,
-        /// <see cref="IdleRefreshInterval"/> will be used.</param>
+        /// <param name="period">The cycle in which the operation is executed.</param>
         /// <param name="cancellationToken">A cancellation token used to propagate notification
         /// that this operation should be canceled.</param>
         /// <returns>An awaitable task without value.</returns>
         public async Task RefreshTableAsync(
-            TimeSpan? period,
+            TimeSpan period,
             CancellationToken cancellationToken)
         {
             while (!cancellationToken.IsCancellationRequested)
             {
                 try
                 {
-                    await Task.Delay(period ?? IdleRefreshInterval, cancellationToken);
+                    await Task.Delay(period, cancellationToken);
 
                     _logger.Debug("Refreshing table...");
                     List<Task> tasks = PeersToBroadcast.Select(
-                        peer => PingAsync(peer, RequestTimeout, cancellationToken)).ToList();
+                        peer => PingAsync(peer, _requestTimeout, cancellationToken)).ToList();
 
                     await Task.WhenAll(tasks);
                     cancellationToken.ThrowIfCancellationRequested();
@@ -192,13 +189,12 @@ namespace Libplanet.Net.Protocols
         /// Reconstructs network connection between peers on network. It runs operation once
         /// right after called, repeated every <see cref="TimeSpan"/> of <paramref name="period"/>.
         /// </summary>
-        /// <param name="period">The cycle in which the operation is executed. If null,
-        /// <see cref="IdleRebuildInterval"/> will be used.</param>
+        /// <param name="period">The cycle in which the operation is executed.</param>
         /// <param name="cancellationToken">A cancellation token used to propagate notification
         /// that this operation should be canceled.</param>
         /// <returns>>An awaitable task without value.</returns>
         public async Task RebuildConnectionAsync(
-            TimeSpan? period,
+            TimeSpan period,
             CancellationToken cancellationToken)
         {
             while (!cancellationToken.IsCancellationRequested)
@@ -206,18 +202,18 @@ namespace Libplanet.Net.Protocols
                 _logger.Debug("Rebuilding connection...");
                 var buffer = new byte[20];
                 var tasks = new List<Task>();
-                for (int i = 0; i < FindConcurrency; i++)
+                for (int i = 0; i < Kademlia.FindConcurrency; i++)
                 {
                     _random.NextBytes(buffer);
                     tasks.Add(FindPeerAsync(
                         new Address(buffer),
                         null,
                         -1,
-                        RequestTimeout,
+                        _requestTimeout,
                         cancellationToken));
                 }
 
-                tasks.Add(FindPeerAsync(_address, null, -1, RequestTimeout, cancellationToken));
+                tasks.Add(FindPeerAsync(_address, null, -1, _requestTimeout, cancellationToken));
                 try
                 {
                     await Task.WhenAll(tasks);
@@ -226,7 +222,7 @@ namespace Libplanet.Net.Protocols
                 {
                 }
 
-                await Task.Delay(period ?? IdleRebuildInterval, cancellationToken);
+                await Task.Delay(period, cancellationToken);
             }
         }
 
@@ -254,7 +250,7 @@ namespace Libplanet.Net.Protocols
         {
             var trace = $"Routing table of [{_address.ToHex()}]\n";
             var count = 0;
-            for (var i = 0; i < TableSize; i++)
+            for (var i = 0; i < _tableSize; i++)
             {
                 if (_routing.BucketOf(i).IsEmpty())
                 {
@@ -370,7 +366,7 @@ namespace Libplanet.Net.Protocols
                     _routing.BucketOf(peer).ReplacementCache.Add(peer);
                     await PingAsync(
                         evictionCandidate,
-                        RequestTimeout,
+                        _requestTimeout,
                         cancellationToken);
                 }
                 catch (TimeoutException)
@@ -393,7 +389,7 @@ namespace Libplanet.Net.Protocols
                 foreach (BoundPeer replacement in bucket.ReplacementCache)
                 {
                     // FIXME: appropriate cancellation token required.
-                    await PingAsync(replacement, RequestTimeout, CancellationToken.None);
+                    await PingAsync(replacement, _requestTimeout, CancellationToken.None);
                 }
             }
         }
@@ -419,7 +415,7 @@ namespace Libplanet.Net.Protocols
             TimeSpan? timeout,
             CancellationToken cancellationToken)
         {
-            if (depth >= MaxDepth)
+            if (depth >= Kademlia.MaxDepth)
             {
                 return;
             }
@@ -442,9 +438,11 @@ namespace Libplanet.Net.Protocols
             TimeSpan? timeout,
             CancellationToken cancellationToken)
         {
-            List<BoundPeer> neighbors = _routing.Neighbors(target, BucketSize).ToList();
+            List<BoundPeer> neighbors = _routing.Neighbors(target, _bucketSize).ToList();
             var found = new List<BoundPeer>();
-            int count = neighbors.Count < FindConcurrency ? neighbors.Count : FindConcurrency;
+            int count = (neighbors.Count < Kademlia.FindConcurrency)
+                ? neighbors.Count
+                : Kademlia.FindConcurrency;
             bool timeoutOccurred = true;
             for (int i = 0; i < count; i++)
             {
@@ -549,10 +547,10 @@ namespace Libplanet.Net.Protocols
 
             peers = Kademlia.SortByDistance(peers, target);
 
-            List<BoundPeer> closestCandidate = _routing.Neighbors(target, BucketSize).ToList();
+            List<BoundPeer> closestCandidate = _routing.Neighbors(target, _bucketSize).ToList();
 
             Task[] awaitables = peers.Select(peer =>
-                PingAsync(peer, RequestTimeout, cancellationToken)
+                PingAsync(peer, _requestTimeout, cancellationToken)
             ).ToArray();
             try
             {
@@ -564,7 +562,7 @@ namespace Libplanet.Net.Protocols
                     e.InnerExceptions.Count == awaitables.Length)
                 {
                     throw new TimeoutException(
-                        $"All neighbors found do not respond in {RequestTimeout}."
+                        $"All neighbors found do not respond in {_requestTimeout}."
                     );
                 }
 
@@ -577,7 +575,7 @@ namespace Libplanet.Net.Protocols
 
             var findNeighboursTasks = new List<Task>();
             Peer closestKnown = closestCandidate.Count == 0 ? null : closestCandidate[0];
-            for (int i = 0; i < FindConcurrency && i < peers.Count; i++)
+            for (int i = 0; i < Kademlia.FindConcurrency && i < peers.Count; i++)
             {
                 if (closestKnown is null ||
                     string.CompareOrdinal(
@@ -617,7 +615,7 @@ namespace Libplanet.Net.Protocols
                 await UpdateAsync(findNeighbors.Remote);
             }
 
-            List<BoundPeer> found = _routing.Neighbors(findNeighbors.Target, BucketSize).ToList();
+            List<BoundPeer> found = _routing.Neighbors(findNeighbors.Target, _bucketSize).ToList();
 
             Neighbors neighbors = new Neighbors(found)
             {
