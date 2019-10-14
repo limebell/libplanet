@@ -30,6 +30,8 @@ namespace Libplanet.Tests.Common.Action
             RecordRandom = recordRandom;
         }
 
+        public static EventHandler<IAction> RenderEventHandler { get; set; }
+
         public static AsyncLocal<ImmutableList<RenderRecord>>
             RenderRecords { get; } =
                 new AsyncLocal<ImmutableList<RenderRecord>>();
@@ -133,6 +135,8 @@ namespace Libplanet.Tests.Common.Action
                 Context = context,
                 NextStates = nextStates,
             });
+
+            RenderEventHandler?.Invoke(this, this);
         }
 
         public void Unrender(
