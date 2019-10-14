@@ -297,7 +297,7 @@ namespace Libplanet.Tests.Blockchain
 
             (Address[] addresses, Block<DumbAction>[] blocks) = MakeFixturesForAppendTests();
 
-            Assert.Empty(_blockChain.Blocks);
+            Assert.Empty(_blockChain);
             Assert.Empty(MinerReward.RenderRecords.Value);
             try
             {
@@ -1030,10 +1030,10 @@ namespace Libplanet.Tests.Blockchain
                     if (sr?.Item1 is HashDigest<SHA256> reference)
                     {
                         refs.Add(reference);
-                        block = chain.Blocks[reference];
+                        block = chain[reference];
                         if (block.PreviousHash is HashDigest<SHA256> prev)
                         {
-                            block = chain.Blocks[prev];
+                            block = chain[prev];
                             continue;
                         }
                     }
@@ -1474,7 +1474,7 @@ namespace Libplanet.Tests.Blockchain
 
             // Build the store has incomplete states
             Block<DumbAction> b = TestUtils.MineGenesis<DumbAction>();
-            chain.Blocks[b.Hash] = b;
+            store.PutBlock(b);
             BuildIndex(chainId, b);
             IImmutableDictionary<Address, object> dirty =
                 GetDirty(b.Evaluate(DateTimeOffset.UtcNow, _ => null));
@@ -1500,7 +1500,7 @@ namespace Libplanet.Tests.Blockchain
                         )
                     );
                     Assert.NotEmpty(dirty);
-                    chain.Blocks[b.Hash] = b;
+                    store.PutBlock(b);
                     store.StoreStateReference(
                         chainId,
                         dirty.Keys.ToImmutableHashSet(),

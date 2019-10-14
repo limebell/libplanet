@@ -16,11 +16,21 @@ To be released.
     disposed to clean up its internal resources. [[#485]]
  -  `IStore.IterateStateReferences()` method became to receive
     `highestIndex`, `lowestIndex`, and `limit` parameters.  [[#447], [#545]]
- -  Reworked `BlockChain<T>.GetStates()` into `GetState()` which takes only one `Address` instead of `IEnumerable<Address>`.  [[#510], [#563]]
+ -  Reworked `BlockChain<T>.GetStates()` into `GetState()` which takes only
+    one `Address` instead of `IEnumerable<Address>`.  [[#510], [#563]]
+ -  Types of `IAction.PlainValue` and states became restricted to
+    `Bencodex.Types.IValue`.  [[#541], [#552]]
+     -  `IAction.LoadPlainValue(IImmutableDictionary<string, object>)` method
+        became replaced by `LoadPlainValue(IValue)`.
+     -  `AccountStateGetter` became to return `IValue`, not `object`.
+     -  Added `BencodexExtension` static class.
+ -  Removed `BlockChain<T>.Blocks`.  [[#409], [#583]]
 
 ### Added interfaces
 
  -  Added `BlockChain<T>.LongCount()` method.  [[#575]]
+ -  Added `BlockChain<T>[HashDigest<T>]` indexer.  [[#409], [#583]]
+ -  Added `BlockChain<T>.Contains(HashDigest<T>)` method.  [[#409], [#583]]
 
 ### Behavioral changes
 
@@ -47,6 +57,7 @@ To be released.
 
 [#209]: https://github.com/planetarium/libplanet/issues/209
 [#405]: https://github.com/planetarium/libplanet/issues/405
+[#409]: https://github.com/planetarium/libplanet/issues/409
 [#447]: https://github.com/planetarium/libplanet/issues/447
 [#462]: https://github.com/planetarium/libplanet/issues/462
 [#469]: https://github.com/planetarium/libplanet/pull/469
@@ -64,6 +75,7 @@ To be released.
 [#566]: https://github.com/planetarium/libplanet/pull/566
 [#575]: https://github.com/planetarium/libplanet/pull/575
 [#576]: https://github.com/planetarium/libplanet/pull/576
+[#583]: https://github.com/planetarium/libplanet/pull/583
 
 
 Version 0.6.0
