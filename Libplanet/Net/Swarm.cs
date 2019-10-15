@@ -48,7 +48,6 @@ namespace Libplanet.Net
         private readonly PrivateKey _privateKey;
         private readonly int _appProtocolVersion;
 
-        private readonly TimeSpan _dialTimeout;
         private readonly AsyncLock _runningMutex;
         private readonly AsyncLock _blockSyncMutex;
         private readonly string _host;
@@ -85,33 +84,6 @@ namespace Libplanet.Net
             BlockChain<T> blockChain,
             PrivateKey privateKey,
             int appProtocolVersion,
-            int millisecondsDialTimeout = 15000,
-            string host = null,
-            int? listenPort = null,
-            DateTimeOffset? createdAt = null,
-            IEnumerable<IceServer> iceServers = null,
-            EventHandler<DifferentProtocolVersionEventArgs>
-                differentVersionPeerEncountered = null)
-            : this(
-                  blockChain,
-                  privateKey,
-                  appProtocolVersion,
-                  TimeSpan.FromMilliseconds(millisecondsDialTimeout),
-                  null,
-                  null,
-                  host,
-                  listenPort,
-                  createdAt,
-                  iceServers,
-                  differentVersionPeerEncountered)
-        {
-        }
-
-        public Swarm(
-            BlockChain<T> blockChain,
-            PrivateKey privateKey,
-            int appProtocolVersion,
-            TimeSpan dialTimeout,
             string host = null,
             int? listenPort = null,
             DateTimeOffset? createdAt = null,
@@ -122,7 +94,6 @@ namespace Libplanet.Net
                 blockChain,
                 privateKey,
                 appProtocolVersion,
-                dialTimeout,
                 null,
                 null,
                 host,
@@ -137,7 +108,6 @@ namespace Libplanet.Net
             BlockChain<T> blockChain,
             PrivateKey privateKey,
             int appProtocolVersion,
-            TimeSpan dialTimeout,
             int? tableSize,
             int? bucketSize,
             string host = null,
@@ -151,7 +121,6 @@ namespace Libplanet.Net
 
             _blockChain = blockChain ?? throw new ArgumentNullException(nameof(blockChain));
             _privateKey = privateKey ?? throw new ArgumentNullException(nameof(privateKey));
-            _dialTimeout = dialTimeout;
             LastSeenTimestamps =
                 new ConcurrentDictionary<Peer, DateTimeOffset>();
 
@@ -354,18 +323,24 @@ namespace Libplanet.Net
         }
 
         public async Task StartAsync(
+            int millisecondsDialTimeout = 15000,
             int millisecondsBroadcastTxInterval = 5000,
             CancellationToken cancellationToken = default(CancellationToken))
         {
             await StartAsync(
+                TimeSpan.FromMilliseconds(millisecondsDialTimeout),
                 TimeSpan.FromMilliseconds(millisecondsBroadcastTxInterval),
                 cancellationToken
             );
         }
 
+#pragma warning disable MEN002 // Line is too long
         /// <summary>
         /// Starts to periodically synchronize the <see cref="BlockChain"/>.
         /// </summary>
+        /// <param name="dialTimeout">
+        /// A timeout value for dialing.
+        /// </param>
         /// <param name="broadcastTxInterval">The time period of exchange of staged transactions.
         /// </param>
         /// /// <param name="cancellationToken">
@@ -381,9 +356,11 @@ namespace Libplanet.Net
         /// so that there are a lot of calls to <see cref="IAction.Render"/> method in a short
         /// period of time.  This can lead a game startup slow.  If you want to omit rendering of
         /// these actions in the behind blocks use <see cref=
-        /// "PreloadAsync(IProgress{PreloadState}, IImmutableSet{Address}, CancellationToken)"
+        /// "PreloadAsync(TimeSpan?, IProgress{PreloadState}, IImmutableSet{Address}, CancellationToken)"
         /// /> method too.</remarks>
+#pragma warning restore MEN002 // Line is too long
         public async Task StartAsync(
+            TimeSpan dialTimeout,
             TimeSpan broadcastTxInterval,
             CancellationToken cancellationToken = default(CancellationToken))
         {
@@ -458,7 +435,11 @@ namespace Libplanet.Net
 
             using (await _runningMutex.LockAsync())
             {
-                await PreloadAsync(render: true, cancellationToken: _cancellationToken);
+                await PreloadAsync(
+                    dialTimeout: dialTimeout,
+                    render: true,
+                    cancellationToken: _cancellationToken
+                );
                 Running = true;
             }
 
@@ -569,6 +550,9 @@ namespace Libplanet.Net
         /// <summary>
         /// Preemptively downloads blocks from registered <see cref="Peer"/>s.
         /// </summary>
+        /// <param name="dialTimeout">
+        /// A timeout value for dialing.
+        /// </param>
         /// <param name="progress">
         /// An instance that receives progress updates for block downloads.
         /// </param>
@@ -591,9 +575,10 @@ namespace Libplanet.Net
         /// </returns>
         /// <remarks>This does not render downloaded <see cref="IAction"/>s, but fills states only.
         /// If you want to render all <see cref="IAction"/>s from the genesis block to the recent
-        /// blocks use <see cref="StartAsync(TimeSpan, CancellationToken)"/> method
+        /// blocks use <see cref="StartAsync(TimeSpan, TimeSpan, CancellationToken)"/> method
         /// instead.</remarks>
         public Task PreloadAsync(
+            TimeSpan? dialTimeout = null,
             IProgress<PreloadState> progress = null,
             IImmutableSet<Address> trustedStateValidators = null,
             CancellationToken cancellationToken = default(CancellationToken)
@@ -601,6 +586,7 @@ namespace Libplanet.Net
         {
             return PreloadAsync(
                 render: false,
+                dialTimeout: dialTimeout,
                 progress: progress,
                 trustedStateValidators: trustedStateValidators,
                 cancellationToken: cancellationToken
@@ -610,6 +596,7 @@ namespace Libplanet.Net
         // FIXME: It is not guaranteed that states will be reported in order. see issue #436, #430
         internal async Task PreloadAsync(
             bool render,
+            TimeSpan? dialTimeout = null,
             IProgress<PreloadState> progress = null,
             IImmutableSet<Address> trustedStateValidators = null,
             CancellationToken cancellationToken = default(CancellationToken)
@@ -621,7 +608,10 @@ namespace Libplanet.Net
             }
 
             IList<(BoundPeer, long?)> peersWithHeight =
-                await DialToExistingPeers(cancellationToken).Select(pp =>
+                await DialToExistingPeers(
+                    dialTimeout,
+                    cancellationToken
+                ).Select(pp =>
                     (pp.Item1, pp.Item2.TipIndex)
                 ).ToListAsync(cancellationToken);
 
@@ -1076,6 +1066,7 @@ namespace Libplanet.Net
         }
 
         private IAsyncEnumerable<(BoundPeer, Pong)> DialToExistingPeers(
+            TimeSpan? dialTimeout,
             CancellationToken cancellationToken)
         {
             return new AsyncEnumerable<(BoundPeer, Pong)>(async yield =>
@@ -1085,7 +1076,11 @@ namespace Libplanet.Net
                     try
                     {
                         Message reply = await SendMessageWithReplyAsync(
-                            peer, new Ping(), _dialTimeout, cancellationToken);
+                            peer,
+                            new Ping(),
+                            dialTimeout,
+                            cancellationToken
+                        );
                         if (reply is Pong pong)
                         {
                             await yield.ReturnAsync((peer, pong));
