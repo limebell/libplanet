@@ -66,8 +66,6 @@ namespace Libplanet.Net
         private CancellationTokenSource _runtimeCancellationTokenSource;
         private CancellationToken _cancellationToken;
         private IPAddress _publicIPAddress;
-        private IProtocol _protocol;
-
         private Task _runtimeProcessor;
 
         static Swarm()
@@ -154,7 +152,7 @@ namespace Libplanet.Net
             _logger = Log.ForContext<Swarm<T>>()
                 .ForContext("SwarmId", loggerId);
 
-            _protocol = new KademliaProtocol<T>(
+            Protocol = new KademliaProtocol<T>(
                 this,
                 _privateKey.PublicKey.ToAddress(),
                 _appProtocolVersion,
@@ -259,9 +257,9 @@ namespace Libplanet.Net
             }
         }
 
-        internal ICollection<BoundPeer> Peers => _protocol.Peers;
+        internal ICollection<BoundPeer> Peers => Protocol.Peers;
 
-        internal IProtocol Protocol => _protocol;
+        internal IProtocol Protocol { get; private set; }
 
         internal int FindNextHashesChunkSize { get; set; } = 500;
 
@@ -445,9 +443,9 @@ namespace Libplanet.Net
             {
                 tasks.Add(BroadcastTxAsync(broadcastTxInterval, _cancellationToken));
                 tasks.Add(
-                    _protocol.RefreshTableAsync(TimeSpan.FromSeconds(10), _cancellationToken));
+                    Protocol.RefreshTableAsync(TimeSpan.FromSeconds(10), _cancellationToken));
                 tasks.Add(
-                    _protocol.RebuildConnectionAsync(TimeSpan.FromMinutes(30), _cancellationToken));
+                    Protocol.RebuildConnectionAsync(TimeSpan.FromMinutes(30), _cancellationToken));
                 tasks.Add(
                     Task.Run(() =>
                     {
@@ -520,7 +518,7 @@ namespace Libplanet.Net
 
             IEnumerable<BoundPeer> peers = seedPeers.OfType<BoundPeer>();
 
-            await _protocol.BootstrapAsync(
+            await Protocol.BootstrapAsync(
                 peers.ToImmutableList(),
                 pingSeedTimeout,
                 findNeighborsTimeout,
@@ -755,7 +753,7 @@ namespace Libplanet.Net
 #pragma warning disable SA1202
         public string TraceTable()
         {
-            return _protocol is null ? string.Empty : _protocol.Trace();
+            return Protocol is null ? string.Empty : Protocol.Trace();
         }
 #pragma warning restore SA1202
 
@@ -764,9 +762,9 @@ namespace Libplanet.Net
             TimeSpan? timeout,
             CancellationToken cancellationToken = default(CancellationToken))
         {
-            if (_protocol is null)
+            if (Protocol is null)
             {
-                throw new ArgumentNullException(nameof(_protocol));
+                throw new ArgumentNullException(nameof(Protocol));
             }
 
             if (cancellationToken == default(CancellationToken))
@@ -776,7 +774,7 @@ namespace Libplanet.Net
 
             try
             {
-                KademliaProtocol<T> kp = (KademliaProtocol<T>)_protocol;
+                KademliaProtocol<T> kp = (KademliaProtocol<T>)Protocol;
 
                 var tasks = new List<Task>();
                 foreach (Peer peer in peers)
@@ -1361,14 +1359,14 @@ namespace Libplanet.Net
                 case Ping ping:
                     {
                         _logger.Debug($"Ping received.");
-                        _protocol.ReceiveMessage(this, ping);
+                        Protocol.ReceiveMessage(this, ping);
                         break;
                     }
 
                 case FindNeighbors findPeer:
                     {
                         _logger.Debug($"FindNeighbors received.");
-                        _protocol.ReceiveMessage(this, findPeer);
+                        Protocol.ReceiveMessage(this, findPeer);
                         break;
                     }
 
@@ -1987,8 +1985,8 @@ namespace Libplanet.Net
             try
             {
                 _logger.Debug($"Broadcasting message [{msg}]");
-                _logger.Debug($"Peers to broadcast : {_protocol.PeersToBroadcast.Count}");
-                _protocol.PeersToBroadcast.ParallelForEachAsync(async peer =>
+                _logger.Debug($"Peers to broadcast : {Protocol.PeersToBroadcast.Count}");
+                Protocol.PeersToBroadcast.ParallelForEachAsync(async peer =>
                 {
                     await SendMessageAsync(peer, msg);
                 });
