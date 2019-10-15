@@ -43,8 +43,6 @@ namespace Libplanet.Net
         private static readonly TimeSpan BlockHashRecvTimeout = TimeSpan.FromSeconds(3);
         private static readonly TimeSpan BlockRecvTimeout = TimeSpan.FromSeconds(15);
         private static readonly TimeSpan TxRecvTimeout = TimeSpan.FromSeconds(3);
-
-        private readonly BlockChain<T> _blockChain;
         private readonly PrivateKey _privateKey;
         private readonly int _appProtocolVersion;
 
@@ -119,7 +117,7 @@ namespace Libplanet.Net
         {
             Running = false;
 
-            _blockChain = blockChain ?? throw new ArgumentNullException(nameof(blockChain));
+            BlockChain = blockChain ?? throw new ArgumentNullException(nameof(blockChain));
             _privateKey = privateKey ?? throw new ArgumentNullException(nameof(privateKey));
             LastSeenTimestamps =
                 new ConcurrentDictionary<Peer, DateTimeOffset>();
@@ -239,7 +237,7 @@ namespace Libplanet.Net
         /// The <see cref="BlockChain{T}"/> instance this <see cref="Swarm{T}"/> instance
         /// synchronizes with.
         /// </summary>
-        public BlockChain<T> BlockChain => _blockChain;
+        public BlockChain<T> BlockChain { get; private set; }
 
         /// <summary>
         /// Whether this <see cref="Swarm{T}"/> instance is running.
@@ -621,9 +619,9 @@ namespace Libplanet.Net
                 return;
             }
 
-            Block<T> initialTip = _blockChain.Tip;
-            BlockLocator initialLocator = _blockChain.GetBlockLocator();
-            _logger.Debug($"initialTip? : {_blockChain.Tip}");
+            Block<T> initialTip = BlockChain.Tip;
+            BlockLocator initialLocator = BlockChain.GetBlockLocator();
+            _logger.Debug($"initialTip? : {BlockChain.Tip}");
 
             // As preloading takes long, the blockchain data can corrupt if a program suddenly
             // terminates during preloading is going on.  In order to make preloading done
@@ -631,8 +629,8 @@ namespace Libplanet.Net
             // upon that forked workspace, and then if preloading ends replace the existing
             // blockchain with it.
             BlockChain<T> workspace = initialTip is Block<T> tip
-                ? _blockChain.Fork(tip.Hash)
-                : new BlockChain<T>(_blockChain.Policy, _blockChain.Store, Guid.NewGuid());
+                ? BlockChain.Fork(tip.Hash)
+                : new BlockChain<T>(BlockChain.Policy, BlockChain.Store, Guid.NewGuid());
 
             var complete = false;
 
@@ -723,7 +721,7 @@ namespace Libplanet.Net
                 }
 
                 if (!complete
-                    || workspace.Tip == _blockChain.Tip
+                    || workspace.Tip == BlockChain.Tip
                     || cancellationToken.IsCancellationRequested)
                 {
                     _logger.Debug(
@@ -731,8 +729,8 @@ namespace Libplanet.Net
                         "and make the existing chain ({2}: {3}) remains.",
                         workspace.Id,
                         workspace.Tip,
-                        _blockChain.Id,
-                        _blockChain.Tip
+                        BlockChain.Id,
+                        BlockChain.Tip
                     );
                     workspace.Store.DeleteChainId(workspace.Id);
                 }
@@ -741,12 +739,12 @@ namespace Libplanet.Net
                     _logger.Debug(
                         "Preloading finished; replace the existing chain ({0}: {1}) with " +
                         "the working chain ({2}: {3}).",
-                        _blockChain.Id,
-                        _blockChain.Tip,
+                        BlockChain.Id,
+                        BlockChain.Tip,
                         workspace.Id,
                         workspace.Tip
                     );
-                    _blockChain.Swap(workspace, render: false);
+                    BlockChain.Swap(workspace, render: false);
                 }
 
                 cancellationToken.ThrowIfCancellationRequested();
@@ -1323,7 +1321,7 @@ namespace Libplanet.Net
                     await Task.Run(
                         () =>
                         {
-                            List<TxId> txIds = _blockChain
+                            List<TxId> txIds = BlockChain
                                 .GetStagedTransactionIds()
                                 .ToList();
 
@@ -1377,7 +1375,7 @@ namespace Libplanet.Net
                 case GetBlockHashes getBlockHashes:
                     {
                         IEnumerable<HashDigest<SHA256>> hashes =
-                            _blockChain.FindNextHashes(
+                            BlockChain.FindNextHashes(
                                 getBlockHashes.Locator,
                                 getBlockHashes.Stop,
                                 FindNextHashesChunkSize);
@@ -1438,7 +1436,7 @@ namespace Libplanet.Net
             }
 
             ImmutableList<HashDigest<SHA256>> newHashes = message.Hashes
-                .Where(hash => !_blockChain.Contains(hash))
+                .Where(hash => !BlockChain.Contains(hash))
                 .ToImmutableList();
 
             if (!newHashes.Any())
@@ -1583,13 +1581,13 @@ namespace Libplanet.Net
             // We assume that the blocks are sorted in order.
             Block<T> oldest = blocks.First();
             Block<T> latest = blocks.Last();
-            Block<T> tip = _blockChain.Tip;
+            Block<T> tip = BlockChain.Tip;
 
             if (tip is null || latest.Index > tip.Index)
             {
                 _logger.Debug("Trying to fill up previous blocks...");
                 await SyncPreviousBlocksAsync(
-                    _blockChain,
+                    BlockChain,
                     peer,
                     oldest.PreviousHash,
                     null,
@@ -1748,8 +1746,8 @@ namespace Libplanet.Net
         private void TransferTxs(GetTxs getTxs)
         {
             IEnumerable<Transaction<T>> txs = getTxs.TxIds
-                .Where(txId => _blockChain.Contains(txId))
-                .Select(_blockChain.GetTransaction);
+                .Where(txId => BlockChain.Contains(txId))
+                .Select(BlockChain.GetTransaction);
 
             foreach (Transaction<T> tx in txs)
             {
@@ -1776,7 +1774,7 @@ namespace Libplanet.Net
             _logger.Debug("Trying to fetch txs...");
 
             ImmutableHashSet<TxId> newTxIds = message.Ids
-                .Where(id => !_blockChain.Contains(id))
+                .Where(id => !BlockChain.Contains(id))
                 .ToImmutableHashSet();
 
             if (!newTxIds.Any())
@@ -1798,7 +1796,7 @@ namespace Libplanet.Net
                 return;
             }
 
-            _blockChain.StageTransactions(txs.ToImmutableHashSet());
+            BlockChain.StageTransactions(txs.ToImmutableHashSet());
             TxReceived.Set();
             _logger.Debug("Txs staged successfully.");
 
@@ -1813,9 +1811,9 @@ namespace Libplanet.Net
 
             foreach (HashDigest<SHA256> hash in getData.BlockHashes)
             {
-                if (_blockChain.Contains(hash))
+                if (BlockChain.Contains(hash))
                 {
-                    Block<T> block = _blockChain[hash];
+                    Block<T> block = BlockChain[hash];
                     byte[] payload = block.ToBencodex(true, true);
                     blocks.Add(payload);
                 }
@@ -1846,7 +1844,7 @@ namespace Libplanet.Net
         private void TransferRecentStates(GetRecentStates getRecentStates)
         {
             BlockLocator baseLocator = getRecentStates.BaseLocator;
-            HashDigest<SHA256>? @base = _blockChain.FindBranchPoint(baseLocator);
+            HashDigest<SHA256>? @base = BlockChain.FindBranchPoint(baseLocator);
             HashDigest<SHA256> target = getRecentStates.TargetBlockHash;
             IImmutableDictionary<HashDigest<SHA256>,
                 IImmutableDictionary<Address, object>
@@ -1854,17 +1852,17 @@ namespace Libplanet.Net
             IImmutableDictionary<Address, IImmutableList<HashDigest<SHA256>>>
                 stateRefs = null;
 
-            if (_blockChain.Contains(target))
+            if (BlockChain.Contains(target))
             {
-                ReaderWriterLockSlim rwlock = _blockChain._rwlock;
+                ReaderWriterLockSlim rwlock = BlockChain._rwlock;
                 rwlock.EnterReadLock();
                 try
                 {
                     // FIXME: Swarm should not directly access to the IStore instance,
                     // but BlockChain<T> should have an indirect interface to its underlying
                     // store.
-                    IStore store = _blockChain.Store;
-                    Guid chainId = _blockChain.Id;
+                    IStore store = BlockChain.Store;
+                    Guid chainId = BlockChain.Id;
 
                     stateRefs = store.ListAllStateReferences(
                         chainId,
@@ -2017,7 +2015,7 @@ namespace Libplanet.Net
             // FIXME: this works, but should be fixed.
             if (msg is Pong pong)
             {
-                pong.TipIndex = _blockChain.Tip?.Index;
+                pong.TipIndex = BlockChain.Tip?.Index;
                 msg = pong;
             }
 
