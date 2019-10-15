@@ -53,7 +53,6 @@ namespace Libplanet.Net
         private readonly AsyncLock _blockSyncMutex;
         private readonly string _host;
         private readonly IList<IceServer> _iceServers;
-        private readonly TimeSpan _linger;
 
         private readonly ILogger _logger;
 
@@ -87,7 +86,6 @@ namespace Libplanet.Net
             PrivateKey privateKey,
             int appProtocolVersion,
             int millisecondsDialTimeout = 15000,
-            int millisecondsLinger = 1000,
             string host = null,
             int? listenPort = null,
             DateTimeOffset? createdAt = null,
@@ -99,7 +97,6 @@ namespace Libplanet.Net
                   privateKey,
                   appProtocolVersion,
                   TimeSpan.FromMilliseconds(millisecondsDialTimeout),
-                  TimeSpan.FromMilliseconds(millisecondsLinger),
                   null,
                   null,
                   host,
@@ -115,7 +112,6 @@ namespace Libplanet.Net
             PrivateKey privateKey,
             int appProtocolVersion,
             TimeSpan dialTimeout,
-            TimeSpan linger,
             string host = null,
             int? listenPort = null,
             DateTimeOffset? createdAt = null,
@@ -127,7 +123,6 @@ namespace Libplanet.Net
                 privateKey,
                 appProtocolVersion,
                 dialTimeout,
-                linger,
                 null,
                 null,
                 host,
@@ -143,7 +138,6 @@ namespace Libplanet.Net
             PrivateKey privateKey,
             int appProtocolVersion,
             TimeSpan dialTimeout,
-            TimeSpan linger,
             int? tableSize,
             int? bucketSize,
             string host = null,
@@ -174,7 +168,6 @@ namespace Libplanet.Net
             _host = host;
             _listenPort = listenPort;
             _appProtocolVersion = appProtocolVersion;
-            _linger = linger;
 
             if (_host != null && _listenPort is int listenPortAsInt)
             {
@@ -320,7 +313,16 @@ namespace Libplanet.Net
         }
 
         public async Task StopAsync(
-            CancellationToken cancellationToken = default(CancellationToken))
+            CancellationToken cancellationToken = default(CancellationToken)
+        )
+        {
+            await StopAsync(TimeSpan.FromSeconds(1), cancellationToken);
+        }
+
+        public async Task StopAsync(
+            TimeSpan waitFor,
+            CancellationToken cancellationToken = default(CancellationToken)
+        )
         {
             _workerCancellationTokenSource?.Cancel();
             _logger.Debug("Stopping...");
@@ -328,7 +330,7 @@ namespace Libplanet.Net
             {
                 if (Running)
                 {
-                    await Task.Delay(_linger, cancellationToken);
+                    await Task.Delay(waitFor, cancellationToken);
 
                     _broadcastQueue.ReceiveReady -= DoBroadcast;
                     _replyQueue.ReceiveReady -= DoReply;
@@ -2050,7 +2052,6 @@ namespace Libplanet.Net
 
                 using (var dealer = new DealerSocket(ToNetMQAddress(req.Peer)))
                 {
-                    dealer.Options.Linger = _linger;
                     _logger.Debug(
                         "Trying to send {@Message} to {PeerAddress}...",
                         req.Message,
