@@ -11,19 +11,21 @@ namespace Libplanet.Tests.Common.Action
         {
         }
 
-        public bool ThrowOnRehearsal { get; set; } = false;
+        public bool ThrowOnRehearsal { get; set; }
 
-        public bool ThrowOnExecution { get; set; } = false;
+        public bool ThrowOnExecution { get; set; }
 
         public IImmutableDictionary<string, object> PlainValue =>
             new Dictionary<string, object>()
             {
-                { "throw", ThrowOnRehearsal },
+                { "throw_on_rehearsal", ThrowOnRehearsal },
+                { "throw_on_execution", ThrowOnExecution },
             }.ToImmutableDictionary();
 
         public void LoadPlainValue(IImmutableDictionary<string, object> plainValue)
         {
-            ThrowOnRehearsal = (bool)plainValue["throw"];
+            ThrowOnRehearsal = (bool)plainValue["throw_on_rehearsal"];
+            ThrowOnExecution = (bool)plainValue["throw_on_execution"];
         }
 
         public IAccountStateDelta Execute(IActionContext context)

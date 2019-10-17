@@ -707,6 +707,11 @@ namespace Libplanet.Blockchain
                     nonceDeltas[txSigner] = nonceDelta + 1;
                 }
 
+                if (evaluateActions)
+                {
+                    ExecuteActions(block, renderActions);
+                }
+
                 _rwlock.EnterWriteLock();
                 try
                 {
@@ -740,11 +745,6 @@ namespace Libplanet.Blockchain
             finally
             {
                 _rwlock.ExitUpgradeableReadLock();
-            }
-
-            if (evaluateActions)
-            {
-                ExecuteActions(block, renderActions);
             }
         }
 
