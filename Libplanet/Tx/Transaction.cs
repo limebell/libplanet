@@ -462,10 +462,7 @@ namespace Libplanet.Tx
             {
                 Context = new StreamingContext(
                     StreamingContextStates.All,
-                    new TransactionSerializationContext
-                    {
-                        IncludeSignature = sign,
-                    }
+                    new TransactionSerializationContext(sign)
                 ),
             };
             using (var stream = new MemoryStream())
@@ -692,9 +689,14 @@ namespace Libplanet.Tx
             return action;
         }
 
-        private struct TransactionSerializationContext
+        private readonly struct TransactionSerializationContext
         {
-            internal bool IncludeSignature { get; set; }
+            internal TransactionSerializationContext(bool includeSignature)
+            {
+                IncludeSignature = includeSignature;
+            }
+
+            internal bool IncludeSignature { get; }
         }
     }
 }
