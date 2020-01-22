@@ -91,6 +91,7 @@ To be released.
  -  Added `ICryptoBackend` class.  [[#758]]
  -  Added `DefaultCryptoBackend` class.  [[#758]]
  -  Added `Swarm<T>.BroadcastBlock(Block<T>)` method.  [[#764]]
+ -  Added `Swarm<T>.CheckAllPeersAsync()` method.  [[#772]]
 
 ### Behavioral changes
 
@@ -214,6 +215,7 @@ To be released.
 [#764]: https://github.com/planetarium/libplanet/pull/764
 [#765]: https://github.com/planetarium/libplanet/issues/765
 [#767]: https://github.com/planetarium/libplanet/pull/767
+[#772]: https://github.com/planetarium/libplanet/pull/772
 
 
 Version 0.7.0
