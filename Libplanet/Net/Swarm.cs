@@ -660,6 +660,11 @@ namespace Libplanet.Net
                     blockHashes.ToArray();
                 var request = new GetBlocks(blockHashesAsArray);
                 int hashCount = blockHashesAsArray.Count();
+                var id = Guid.NewGuid();
+                string hashesString =
+                    blockHashesAsArray.Aggregate(string.Empty, (s, digest) => s + digest + ", ");
+                _logger.Debug(
+                    $"[DEUBUG] GetBlocksAsync Started. Hashes: [{hashesString}], Guid: {id}");
 
                 if (hashCount < 1)
                 {
@@ -672,6 +677,7 @@ namespace Libplanet.Net
                     blockRecvTimeout = MaxTimeout;
                 }
 
+                _logger.Debug($"[DEBUG] GetBlock message sent. Guid: {id}");
                 IEnumerable<Message> replies = await _transport.SendMessageWithReplyAsync(
                     peer,
                     request,
@@ -679,6 +685,7 @@ namespace Libplanet.Net
                     ((hashCount - 1) / request.ChunkSize) + 1,
                     yieldToken
                 );
+                _logger.Debug($"[DEBUG] Received blocks. Guid: {id}");
 
                 foreach (Message message in replies)
                 {
@@ -686,12 +693,17 @@ namespace Libplanet.Net
                     {
                         IList<byte[]> payloads = blockMessage.Payloads;
                         _logger.Debug(
-                            "Received {0} blocks from {1}.",
+                            "[DEBUG] Received {0} blocks from {1}.",
                             payloads.Count,
                             message.Remote.PublicKey.ToAddress().ToHex());
                         foreach (byte[] payload in payloads)
                         {
+                            _logger.Debug($"[DEBUG] Deserializing block... Guid: {id}");
+                            var currentTime = DateTimeOffset.UtcNow;
                             Block<T> block = Block<T>.Deserialize(payload);
+                            _logger.Debug(
+                                $"[DEBUG] Desderialized block {block}. Guid: {id}," +
+                                $" (Time taken: {DateTimeOffset.UtcNow - currentTime})");
                             await yield.ReturnAsync(block);
                         }
                     }
@@ -1195,6 +1207,10 @@ namespace Libplanet.Net
 
             BlockHeaderReceived.Set();
             BlockHeader header = message.Header;
+            _logger.Debug(
+                "[DEBUG] Block header of hash [{Hash}] (index: {Index}) received.",
+                ByteUtil.Hex(header.Hash),
+                header.Index);
 
             // FIXME: this should be changed into total difficulty.
             if (header.Index > BlockChain.Tip.Index)
@@ -1216,7 +1232,7 @@ namespace Libplanet.Net
             CancellationToken cancellationToken)
         {
             _logger.Debug(
-                $"Trying to {nameof(GetBlocksAsync)}() using {{0}} hashes.",
+                $"{nameof(FetchBlocks)}: Trying to {nameof(GetBlocksAsync)}() using {{0}} hashes.",
                 hashes.Count);
 
             System.Collections.Async.IAsyncEnumerable<Block<T>> fetched = GetBlocksAsync(
@@ -1245,9 +1261,12 @@ namespace Libplanet.Net
                     if (await AppendBlocksAsync(peer, blocks, cancellationToken))
                     {
                         BroadcastBlock(peer.Address, blocks.Last());
+                        _logger.Debug("Fetch complete.");
                     }
-
-                    _logger.Debug("Append complete.");
+                    else
+                    {
+                        _logger.Debug("Fetch failed.");
+                    }
                 }
             }
             catch (TimeoutException)
@@ -1278,6 +1297,7 @@ namespace Libplanet.Net
             int retry = 3;
             long previousTipIndex = blockChain.Tip?.Index ?? -1;
             BlockChain<T> synced = null;
+            _logger.Debug("[DEBUG] Try to SyncPreviousBlocksAsync.");
 
             try
             {
@@ -1368,12 +1388,12 @@ namespace Libplanet.Net
                          blocks.Any(block => block.PreviousHash.Equals(tip.Hash)))
                 {
                     // FIXME: This may not work as expected in multi-miner environment.
-                    _logger.Debug("Does not need to fill.");
+                    _logger.Debug("[DEBUG] Does not need to fill.");
                     blocksToAppend = blocks.Where(block => block.Index > tip.Index).ToList();
                 }
                 else
                 {
-                    _logger.Debug("Trying to fill up previous blocks...");
+                    _logger.Debug("[DEBUG] Trying to fill up previous blocks...");
                     await SyncPreviousBlocksAsync(
                         BlockChain,
                         peer,
@@ -1383,7 +1403,7 @@ namespace Libplanet.Net
                         evaluateActions: true,
                         cancellationToken: cancellationToken
                     );
-                    _logger.Debug("Filled up; trying to concatenation...");
+                    _logger.Debug("[DEBUG] Filled up; trying to concatenation...");
                     blocksToAppend = blocks;
                 }
 
@@ -1392,7 +1412,7 @@ namespace Libplanet.Net
                     BlockChain.Append(block);
                 }
 
-                _logger.Debug("Sync is done.");
+                _logger.Debug("[DEBUG] Sync is done.");
 
                 BlockAppended.Set();
 
@@ -1408,7 +1428,7 @@ namespace Libplanet.Net
             else
             {
                 _logger.Information(
-                    "Received index is older than current chain's tip." +
+                    "[DEBUG] Received index is older than current chain's tip." +
                     " ignored.");
                 return false;
             }
@@ -1427,6 +1447,7 @@ namespace Libplanet.Net
         {
             BlockChain<T> workspace = blockChain;
             var scope = new List<Guid>();
+            _logger.Debug("[DEBUG] FillBlockAsync started.");
 
             try
             {
@@ -1496,8 +1517,10 @@ namespace Libplanet.Net
                     }
 
                     int hashCount = hashesAsArray.Count();
+                    string hashString =
+                        hashesAsArray.Aggregate(string.Empty, (s, digest) => s + digest + ", ");
                     _logger.Debug(
-                        $"Required hashes (count: {hashCount}). " +
+                        $"[DEBUG] Required hashes [{hashString}] (count: {hashCount}). " +
                         $"(tip: {workspace.Tip?.Hash})"
                     );
 
@@ -1508,7 +1531,7 @@ namespace Libplanet.Net
                             block =>
                             {
                                 _logger.Debug(
-                                    $"Trying to append block[{block.Hash}]...");
+                                    $"[DEBUG] Trying to append block[{block.Hash}]...");
 
                                 cancellationToken.ThrowIfCancellationRequested();
 
