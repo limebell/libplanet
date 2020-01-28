@@ -171,16 +171,10 @@ namespace Libplanet.Net.Protocols
             try
             {
                 _logger.Debug("Validating all peers: {Count}", _routing.Peers.Count());
-                List<Task> tasks = _routing.Peers
-                    .Select(peer =>
-                        ValidateAsync(
-                            peer,
-                            timeout ?? _requestTimeout,
-                            cancellationToken)
-                    ).ToList();
-
-                await Task.WhenAll(tasks);
-                cancellationToken.ThrowIfCancellationRequested();
+                foreach (var peer in _routing.Peers)
+                {
+                    await ValidateAsync(peer, timeout ?? _requestTimeout, cancellationToken);
+                }
             }
             catch (TimeoutException e)
             {
