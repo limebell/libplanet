@@ -47,6 +47,7 @@ namespace Libplanet.Net
         private IPAddress _publicIPAddress;
 
         private AsyncCollection<MessageRequest> _requests;
+        private int _requestCount;
         private CancellationTokenSource _runtimeCancellationTokenSource;
         private Task _runtimeProcessor;
 
@@ -93,6 +94,7 @@ namespace Libplanet.Net
 
             _requests = new AsyncCollection<MessageRequest>();
             _runtimeCancellationTokenSource = new CancellationTokenSource();
+            _requestCount = 0;
             _runtimeProcessor = Task.Factory.StartNew(
                 () =>
                 {
@@ -454,23 +456,33 @@ namespace Libplanet.Net
         {
             if (_behindNAT)
             {
+                _logger.Debug("Create permission started.");
                 await CreatePermission(peer);
+                _logger.Debug("Create permission complete.");
             }
 
             Guid reqId = Guid.NewGuid();
             try
             {
-                _logger.Verbose(
+                _logger.Debug(
                     "Enqueue a request {RequestId} to {PeerAddress}: {Message}.",
                     reqId,
                     peer.Address,
                     message
                 );
                 var tcs = new TaskCompletionSource<IEnumerable<Message>>();
+                _requestCount++;
                 await _requests.AddAsync(
-                    new MessageRequest(reqId, message, peer, timeout, expectedResponses, tcs)
+                    new MessageRequest(
+                        reqId,
+                        message,
+                        peer,
+                        DateTimeOffset.UtcNow,
+                        timeout,
+                        expectedResponses,
+                        tcs)
                 );
-                _logger.Verbose(
+                _logger.Debug(
                     "Enqueued a request {RequestId} to {PeerAddress}: {Message}.",
                     reqId,
                     peer.Address,
@@ -704,6 +716,8 @@ namespace Libplanet.Net
             {
                 _logger.Verbose("Waiting for a new request...");
                 MessageRequest req = await _requests.TakeAsync(cancellationToken);
+                _requestCount--;
+                _logger.Verbose("Request taken. {Count} requests are left.", _requestCount);
 
                 try
                 {
@@ -711,7 +725,7 @@ namespace Libplanet.Net
                 }
                 catch (OperationCanceledException)
                 {
-                    _logger.Information("Cancellation requsted; shutdown runtime...");
+                    _logger.Debug("Cancellation requsted; shutdown runtime...");
                     throw;
                 }
                 catch (Exception e)
@@ -725,6 +739,7 @@ namespace Libplanet.Net
                             e,
                             retryAfter
                         );
+                        _requestCount++;
                         await _requests.AddAsync(req.Retry(), cancellationToken);
                         await Task.Delay(retryAfter, cancellationToken);
                     }
@@ -738,7 +753,12 @@ namespace Libplanet.Net
 
         private async Task ProcessRequest(MessageRequest req, CancellationToken cancellationToken)
         {
-            _logger.Verbose("Request {RequestId} taken.", req.Id);
+            _logger.Verbose(
+                "Request {Message}({RequestId}) taken in {TimeSpan}ms.",
+                req.Message,
+                req.Id,
+                (DateTimeOffset.UtcNow - req.RequestedTime).Milliseconds);
+            DateTimeOffset startedTime = DateTimeOffset.UtcNow;
 
             using (var dealer = new DealerSocket(ToNetMQAddress(req.Peer)))
             {
@@ -782,8 +802,12 @@ namespace Libplanet.Net
                             reply.Remote
                         );
                         ValidateSender(reply.Remote);
-                        Protocol.ReceiveMessage(reply);
                         result.Add(reply);
+                    }
+
+                    if (req.ExpectedResponses > 0)
+                    {
+                        Protocol.ReceiveMessage(result[0]);
                     }
 
                     tcs.SetResult(result);
@@ -800,6 +824,12 @@ namespace Libplanet.Net
                 // Delaying dealer disposing to avoid ObjectDisposedException on NetMQPoller
                 await Task.Delay(100, cancellationToken);
             }
+
+            _logger.Debug(
+                "Request {Message}({RequestId}) processed in {TimeSpan}ms.",
+                req.Message,
+                req.Id,
+                (DateTimeOffset.UtcNow - startedTime).Milliseconds);
         }
 
         // FIXME: Separate turn related features outside of Transport if possible.
@@ -953,6 +983,7 @@ namespace Libplanet.Net
                 in Guid id,
                 Message message,
                 BoundPeer peer,
+                DateTimeOffset requestedTime,
                 in TimeSpan? timeout,
                 in int expectedResponses,
                 TaskCompletionSource<IEnumerable<Message>> taskCompletionSource)
@@ -960,6 +991,7 @@ namespace Libplanet.Net
                       id,
                       message,
                       peer,
+                      requestedTime,
                       timeout,
                       expectedResponses,
                       taskCompletionSource,
@@ -972,6 +1004,7 @@ namespace Libplanet.Net
                 in Guid id,
                 Message message,
                 BoundPeer peer,
+                DateTimeOffset requestedTime,
                 in TimeSpan? timeout,
                 in int expectedResponses,
                 TaskCompletionSource<IEnumerable<Message>> taskCompletionSource,
@@ -980,6 +1013,7 @@ namespace Libplanet.Net
                 Id = id;
                 Message = message;
                 Peer = peer;
+                RequestedTime = requestedTime;
                 Timeout = timeout;
                 ExpectedResponses = expectedResponses;
                 TaskCompletionSource = taskCompletionSource;
@@ -991,6 +1025,8 @@ namespace Libplanet.Net
             public Message Message { get; }
 
             public BoundPeer Peer { get; }
+
+            public DateTimeOffset RequestedTime { get; }
 
             public TimeSpan? Timeout { get; }
 
@@ -1006,6 +1042,7 @@ namespace Libplanet.Net
                     Id,
                     Message,
                     Peer,
+                    RequestedTime,
                     Timeout,
                     ExpectedResponses,
                     TaskCompletionSource,

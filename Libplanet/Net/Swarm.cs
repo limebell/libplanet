@@ -1183,9 +1183,11 @@ namespace Libplanet.Net
             BlockHeaderReceived.Set();
             BlockHeader header = message.Header;
             _logger.Debug(
-                "[DEBUG] Block header of hash [{Hash}] (index: {Index}) received.",
+                "[DEBUG] Block header of hash [{Hash}] (index: {Index}) received. " +
+                "This is {Address}",
                 ByteUtil.Hex(header.Hash),
-                header.Index);
+                header.Index,
+                Address.ToHex());
 
             using (await _blockSyncMutex.LockAsync(cancellationToken))
             {
@@ -1199,7 +1201,12 @@ namespace Libplanet.Net
                 else
                 {
                     _logger.Debug(
-                        $"No blocks are required; {nameof(BlockHeaderMessage)} is ignored.");
+                        "No blocks are required " +
+                        "(current: {Current}, demand: {Demand}, received: {Received});" +
+                        $" {nameof(BlockHeaderMessage)} is ignored.",
+                        BlockChain.Tip.Index,
+                        _demandBlockHash?.Item1,
+                        header.Index);
                 }
             }
         }
