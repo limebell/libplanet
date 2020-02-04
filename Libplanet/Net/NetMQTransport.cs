@@ -464,9 +464,8 @@ namespace Libplanet.Net
             {
                 DateTimeOffset now = DateTimeOffset.UtcNow;
                 _logger.Debug(
-                    "Enqueue a request {RequestId} at {Time} to {PeerAddress}: {Message}.",
+                    "Enqueue a request {RequestId} to {PeerAddress}: {Message}.",
                     reqId,
-                    now,
                     peer.Address,
                     message
                 );
@@ -719,7 +718,7 @@ namespace Libplanet.Net
                 _logger.Verbose("Waiting for a new request...");
                 MessageRequest req = await _requests.TakeAsync(cancellationToken);
                 Interlocked.Decrement(ref _requestCount);
-                _logger.Debug(
+                _logger.Verbose(
                     "Request taken. {Count} requests are left. Runtime id: {Id}",
                     Interlocked.Read(ref _requestCount),
                     id);
@@ -758,12 +757,11 @@ namespace Libplanet.Net
 
         private async Task ProcessRequest(MessageRequest req, CancellationToken cancellationToken)
         {
-            _logger.Debug(
-                "Request {Message}({RequestId}) is processed at {Time} in {TimeSpan}ms.",
+            _logger.Verbose(
+                "Request {Message}({RequestId}) is ready to be processed in {TimeSpan}ms.",
                 req.Message,
                 req.Id,
-                req.RequestedTime,
-                (DateTimeOffset.UtcNow - req.RequestedTime).Milliseconds);
+                (DateTimeOffset.UtcNow - req.RequestedTime).TotalMilliseconds);
             DateTimeOffset startedTime = DateTimeOffset.UtcNow;
 
             using (var dealer = new DealerSocket(ToNetMQAddress(req.Peer)))
@@ -831,11 +829,11 @@ namespace Libplanet.Net
                 await Task.Delay(100, cancellationToken);
             }
 
-            _logger.Debug(
+            _logger.Verbose(
                 "Request {Message}({RequestId}) processed in {TimeSpan}ms.",
                 req.Message,
                 req.Id,
-                (DateTimeOffset.UtcNow - startedTime).Milliseconds);
+                (DateTimeOffset.UtcNow - startedTime).TotalMilliseconds);
         }
 
         // FIXME: Separate turn related features outside of Transport if possible.

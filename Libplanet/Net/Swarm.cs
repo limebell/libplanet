@@ -36,6 +36,7 @@ namespace Libplanet.Net
         private readonly int _appProtocolVersion;
 
         private readonly AsyncLock _blockSyncMutex;
+        private readonly AsyncLock _txSyncMutex;
         private readonly AsyncLock _runningMutex;
 
         private readonly ILogger _logger;
@@ -47,6 +48,7 @@ namespace Libplanet.Net
         private CancellationToken _cancellationToken;
 
         private (long, BoundPeer, HashDigest<SHA256>)? _demandBlockHash;
+        private ConcurrentDictionary<TxId, BoundPeer> _demandTxIds;
 
         static Swarm()
         {
@@ -110,6 +112,7 @@ namespace Libplanet.Net
             BlockReceived = new AsyncAutoResetEvent();
 
             _blockSyncMutex = new AsyncLock();
+            _txSyncMutex = new AsyncLock();
             _runningMutex = new AsyncLock();
 
             _appProtocolVersion = appProtocolVersion;
@@ -271,6 +274,8 @@ namespace Libplanet.Net
             _cancellationToken = CancellationTokenSource.CreateLinkedTokenSource(
                     _workerCancellationTokenSource.Token, cancellationToken
                 ).Token;
+            _demandBlockHash = null;
+            _demandTxIds = new ConcurrentDictionary<TxId, BoundPeer>();
             await _transport.StartAsync(_cancellationToken);
 
             _logger.Debug("Starting swarm...");
@@ -281,6 +286,7 @@ namespace Libplanet.Net
                 tasks.Add(_transport.RunAsync(_cancellationToken));
                 tasks.Add(BroadcastTxAsync(broadcastTxInterval, _cancellationToken));
                 tasks.Add(ProcessFillblock(_cancellationToken));
+                tasks.Add(ProcessFillTxs(_cancellationToken));
                 _logger.Debug("Swarm started.");
 
                 await await Task.WhenAny(tasks);
@@ -1463,12 +1469,12 @@ namespace Libplanet.Net
                 return;
             }
 
-            _logger.Debug("Trying to fetch txs...");
             _logger.Debug(
                 "Received TxIds: [{txIds}]",
                 string.Join(", ", message.Ids));
 
             ImmutableHashSet<TxId> newTxIds = message.Ids
+                .Where(id => !_demandTxIds.ContainsKey(id))
                 .Where(id => !_store.ContainsTransaction(id))
                 .ToImmutableHashSet();
 
@@ -1478,24 +1484,15 @@ namespace Libplanet.Net
                 return;
             }
 
-            List<Transaction<T>> txs;
-            try
-            {
-                System.Collections.Async.IAsyncEnumerable<Transaction<T>> fetched = GetTxsAsync(
-                    peer, newTxIds, cancellationToken);
-                txs = await fetched.ToListAsync(cancellationToken);
-            }
-            catch (TimeoutException)
-            {
-                _logger.Debug($"Timeout occurred during {nameof(ProcessTxIds)}().");
-                return;
-            }
+            _logger.Debug("Txs to require: [{txIds}]", string.Join(", ", newTxIds));
 
-            BlockChain.StageTransactions(txs.ToImmutableHashSet());
-            TxReceived.Set();
-            _logger.Debug("Txs staged successfully.");
-
-            BroadcastTxs(message.Remote.Address, txs);
+            using (await _txSyncMutex.LockAsync(cancellationToken))
+            {
+                foreach (var txid in newTxIds)
+                {
+                    _demandTxIds.TryAdd(txid, peer);
+                }
+            }
         }
 
         private void TransferBlocks(GetBlocks getData)
@@ -1716,6 +1713,59 @@ namespace Libplanet.Net
                             _logger.Error(e, msg, e);
                         }
                     }
+                }
+            }
+        }
+
+        private async Task ProcessFillTxs(CancellationToken cancellationToken)
+        {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                if (_demandTxIds.IsEmpty)
+                {
+                    await Task.Delay(100, cancellationToken);
+                }
+                else
+                {
+                    _logger.Debug(
+                        "Processing txids: [{txIds}]",
+                        string.Join(", ", _demandTxIds.Keys));
+                    var demandTxIds = _demandTxIds.ToArray();
+                    var demands = new Dictionary<BoundPeer, List<TxId>>();
+
+                    foreach (var kv in _demandTxIds)
+                    {
+                        if (!demands.ContainsKey(kv.Value))
+                        {
+                            demands[kv.Value] = new List<TxId>();
+                        }
+
+                        demands[kv.Value].Add(kv.Key);
+                    }
+
+                    List<Transaction<T>> txs = new List<Transaction<T>>();
+                    foreach (var kv in demands)
+                    {
+                        try
+                        {
+                            System.Collections.Async.IAsyncEnumerable<Transaction<T>> fetched =
+                                GetTxsAsync(
+                                    kv.Key, kv.Value, cancellationToken);
+                            txs.AddRange(await fetched.ToListAsync(cancellationToken));
+                        }
+                        catch (TimeoutException)
+                        {
+                        }
+                    }
+
+                    BlockChain.StageTransactions(txs.ToImmutableHashSet());
+                    TxReceived.Set();
+                    _logger.Debug("Txs staged successfully.");
+
+                    // FIXME: null?
+                    BroadcastTxs(null, txs);
+
+                    _demandTxIds.Clear();
                 }
             }
         }
