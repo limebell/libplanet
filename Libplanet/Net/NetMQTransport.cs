@@ -47,7 +47,7 @@ namespace Libplanet.Net
         private IPAddress _publicIPAddress;
 
         private AsyncCollection<MessageRequest> _requests;
-        private int _requestCount;
+        private long _requestCount;
         private CancellationTokenSource _runtimeCancellationTokenSource;
         private Task _runtimeProcessor;
 
@@ -456,37 +456,38 @@ namespace Libplanet.Net
         {
             if (_behindNAT)
             {
-                _logger.Debug("Create permission started.");
                 await CreatePermission(peer);
-                _logger.Debug("Create permission complete.");
             }
 
             Guid reqId = Guid.NewGuid();
             try
             {
+                DateTimeOffset now = DateTimeOffset.UtcNow;
                 _logger.Debug(
-                    "Enqueue a request {RequestId} to {PeerAddress}: {Message}.",
+                    "Enqueue a request {RequestId} at {Time} to {PeerAddress}: {Message}.",
                     reqId,
+                    now,
                     peer.Address,
                     message
                 );
                 var tcs = new TaskCompletionSource<IEnumerable<Message>>();
-                _requestCount++;
+                Interlocked.Increment(ref _requestCount);
                 await _requests.AddAsync(
                     new MessageRequest(
                         reqId,
                         message,
                         peer,
-                        DateTimeOffset.UtcNow,
+                        now,
                         timeout,
                         expectedResponses,
                         tcs)
                 );
                 _logger.Debug(
-                    "Enqueued a request {RequestId} to {PeerAddress}: {Message}.",
+                    "Enqueued a request {RequestId} to {PeerAddress}: {Message}. (left: {Count})",
                     reqId,
                     peer.Address,
-                    message
+                    message,
+                    Interlocked.Read(ref _requestCount)
                 );
 
                 var reply = (await tcs.Task).ToList();
@@ -712,12 +713,16 @@ namespace Libplanet.Net
         private async Task ProcessRuntime(
             CancellationToken cancellationToken = default(CancellationToken))
         {
+            Guid id = Guid.NewGuid();
             while (!cancellationToken.IsCancellationRequested)
             {
                 _logger.Verbose("Waiting for a new request...");
                 MessageRequest req = await _requests.TakeAsync(cancellationToken);
-                _requestCount--;
-                _logger.Verbose("Request taken. {Count} requests are left.", _requestCount);
+                Interlocked.Decrement(ref _requestCount);
+                _logger.Debug(
+                    "Request taken. {Count} requests are left. Runtime id: {Id}",
+                    Interlocked.Read(ref _requestCount),
+                    id);
 
                 try
                 {
@@ -739,7 +744,7 @@ namespace Libplanet.Net
                             e,
                             retryAfter
                         );
-                        _requestCount++;
+                        Interlocked.Increment(ref _requestCount);
                         await _requests.AddAsync(req.Retry(), cancellationToken);
                         await Task.Delay(retryAfter, cancellationToken);
                     }
@@ -753,10 +758,11 @@ namespace Libplanet.Net
 
         private async Task ProcessRequest(MessageRequest req, CancellationToken cancellationToken)
         {
-            _logger.Verbose(
-                "Request {Message}({RequestId}) taken in {TimeSpan}ms.",
+            _logger.Debug(
+                "Request {Message}({RequestId}) is processed at {Time} in {TimeSpan}ms.",
                 req.Message,
                 req.Id,
+                req.RequestedTime,
                 (DateTimeOffset.UtcNow - req.RequestedTime).Milliseconds);
             DateTimeOffset startedTime = DateTimeOffset.UtcNow;
 
