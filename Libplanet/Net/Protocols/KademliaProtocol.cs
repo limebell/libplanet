@@ -551,6 +551,12 @@ namespace Libplanet.Net.Protocols
                 RemovePeer(peer);
                 throw;
             }
+            catch (InvalidMessageException)
+            {
+                _logger.Verbose("Peer {Peer} is invalid, removing...", peer);
+                RemovePeer(peer);
+                throw;
+            }
         }
 
         /// <summary>
