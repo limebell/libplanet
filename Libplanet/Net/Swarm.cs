@@ -908,24 +908,6 @@ namespace Libplanet.Net
             await kademliaProtocol.CheckAllPeersAsync(timeout, cancellationToken);
         }
 
-        internal async Task AddPeersAsync(
-            IEnumerable<Peer> peers,
-            TimeSpan? timeout,
-            CancellationToken cancellationToken = default(CancellationToken))
-        {
-            if (Transport is null)
-            {
-                throw new ArgumentNullException(nameof(Transport));
-            }
-
-            if (cancellationToken == default(CancellationToken))
-            {
-                cancellationToken = _cancellationToken;
-            }
-
-            await PeerDiscovery.AddPeersAsync(peers, timeout, cancellationToken);
-        }
-
         // FIXME: This would be better if it's merged with GetDemandBlockHashes
         internal async IAsyncEnumerable<Tuple<long, HashDigest<SHA256>>> GetBlockHashes(
             BoundPeer peer,
