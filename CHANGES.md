@@ -135,8 +135,12 @@ To be released.
  -  Added `Swarm<T>.AddPeersAsync()` method.  [[#1234]]
  -  Added `NetMQTransport.QueryAppProtocolVersion()` static method.  [[#1235]]
  -  Added `BoundPeer.Parse()` static method.  [[#1240]]
+ -  Added `TransportException` class.  [[#1242]]
 
 ### Behavioral changes
+
+ -  `ITransport.StartAsync()` and `ITransport.RunAsync()` became to throw
+    `TransportException` instead of `SwarmException`.  [[#1242]]
 
 ### Bug fixes
 
@@ -161,6 +165,7 @@ To be released.
 [#1234]: https://github.com/planetarium/libplanet/pull/1234
 [#1235]: https://github.com/planetarium/libplanet/pull/1235
 [#1240]: https://github.com/planetarium/libplanet/pull/1240
+[#1242]: https://github.com/planetarium/libplanet/pull/1242
 
 
 Version 0.11.0
