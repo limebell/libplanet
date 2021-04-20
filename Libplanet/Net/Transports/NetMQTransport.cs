@@ -421,7 +421,14 @@ namespace Libplanet.Net.Transports
                 using CancellationTokenRegistration ctr =
                     cancellationToken.Register(() => tcs.TrySetCanceled());
                 await _requests.Writer.WriteAsync(
-                    new MessageRequest(reqId, message, peer, now, timeout, expectedResponses, tcs),
+                    new MessageRequest(
+                        reqId,
+                        message,
+                        peer,
+                        now,
+                        timeout ?? TimeSpan.FromSeconds(5),
+                        expectedResponses,
+                        tcs),
                     cancellationToken
                 );
                 _logger.Verbose(
@@ -450,6 +457,7 @@ namespace Libplanet.Net.Transports
                 }
                 else
                 {
+                    await tcs.Task;
                     return new Message[0];
                 }
             }
@@ -780,10 +788,8 @@ namespace Libplanet.Net.Transports
             TaskCompletionSource<IEnumerable<Message>> tcs = req.TaskCompletionSource;
             try
             {
-                await dealer.SendMultipartMessageAsync(
-                    message,
-                    timeout: req.Timeout,
-                    cancellationToken: cancellationToken
+                dealer.SendMultipartMessage(
+                    message
                 );
 
                 _logger.Debug(
@@ -973,7 +979,7 @@ namespace Libplanet.Net.Transports
                 Message message,
                 BoundPeer peer,
                 DateTimeOffset requestedTime,
-                in TimeSpan? timeout,
+                in TimeSpan timeout,
                 in int expectedResponses,
                 TaskCompletionSource<IEnumerable<Message>> taskCompletionSource)
                 : this(
@@ -994,7 +1000,7 @@ namespace Libplanet.Net.Transports
                 Message message,
                 BoundPeer peer,
                 DateTimeOffset requestedTime,
-                in TimeSpan? timeout,
+                in TimeSpan timeout,
                 in int expectedResponses,
                 TaskCompletionSource<IEnumerable<Message>> taskCompletionSource,
                 int retried)
@@ -1017,7 +1023,7 @@ namespace Libplanet.Net.Transports
 
             public DateTimeOffset RequestedTime { get; }
 
-            public TimeSpan? Timeout { get; }
+            public TimeSpan Timeout { get; }
 
             public int ExpectedResponses { get; }
 

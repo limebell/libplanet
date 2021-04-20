@@ -1,17 +1,16 @@
 #nullable enable
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Net;
-using System.Threading;
 using System.Threading.Tasks;
 using Libplanet.Crypto;
 using Libplanet.Net;
 using Libplanet.Net.Messages;
 using Libplanet.Net.Protocols;
 using Libplanet.Net.Transports;
-using Nito.AsyncEx;
+using NetMQ;
+using NetMQ.Sockets;
 using Serilog;
 using Xunit;
 using Xunit.Abstractions;
@@ -59,13 +58,20 @@ namespace Libplanet.Tests.Net.Transports
         [SkippableFact(Timeout = Timeout)]
         public async Task MessageHistory()
         {
-            var transportA = CreateNetMQTransport();
+            var privateKey = new PrivateKey();
+            var transportA = CreateNetMQTransport(privateKey);
             var transportB = CreateNetMQTransport();
 
-            var messageReceived = new AsyncAutoResetEvent();
+            var tcs = new TaskCompletionSource<IEnumerable<Message>>();
+            var list = new List<Message>();
             transportB.ProcessMessageHandler += (sender, message) =>
             {
-                messageReceived.Set();
+                list.Add(message);
+
+                if (list.Count == 2)
+                {
+                    tcs.SetResult(list);
+                }
             };
 
             try
@@ -73,12 +79,24 @@ namespace Libplanet.Tests.Net.Transports
                 await InitializeAsync(transportA);
                 await InitializeAsync(transportB);
                 var boundPeer = (BoundPeer)transportB.AsPeer;
-                Task t = messageReceived.WaitAsync();
-                await transportA.SendMessageAsync(boundPeer, new Ping(), CancellationToken.None);
-                await t;
-                t = messageReceived.WaitAsync();
-                await transportA.SendMessageAsync(boundPeer, new Pong(), CancellationToken.None);
-                await t;
+                var dealer = new DealerSocket(boundPeer.ToNetMQAddress());
+                dealer.TrySendMultipartMessage(
+                    TimeSpan.FromSeconds(10),
+                    new Ping().ToNetMQMessage(
+                        privateKey,
+                        transportA.AsPeer,
+                        DateTimeOffset.UtcNow,
+                        default));
+                dealer.TrySendMultipartMessage(
+                    TimeSpan.FromSeconds(10),
+                    new Pong().ToNetMQMessage(
+                        privateKey,
+                        transportA.AsPeer,
+                        DateTimeOffset.UtcNow,
+                        default));
+                /*await transportA.SendMessageAsync(boundPeer, new Ping(), CancellationToken.None)
+                await transportA.SendMessageAsync(boundPeer, new Pong(), CancellationToken.None)*/
+                await tcs.Task;
 
                 transportB.MessageHistory.TryDequeue(out var message1);
                 transportB.MessageHistory.TryDequeue(out var message2);
