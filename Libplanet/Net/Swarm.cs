@@ -334,13 +334,9 @@ namespace Libplanet.Net
                 ).Token;
             BlockDemand = null;
             _demandTxIds = new ConcurrentDictionary<TxId, BoundPeer>();
-            try
+            if (Transport.Running)
             {
-                await Transport.StartAsync(_cancellationToken);
-            }
-            catch (TransportException te)
-            {
-                throw new SwarmException("Swarm is already running.", innerException: te);
+                throw new SwarmException("Swarm is already running.");
             }
 
             _logger.Debug("Starting swarm...");
@@ -354,7 +350,7 @@ namespace Libplanet.Net
                         Options.RefreshLifespan,
                         _cancellationToken));
                 tasks.Add(RebuildConnectionAsync(TimeSpan.FromMinutes(30), _cancellationToken));
-                tasks.Add(Transport.RunAsync(_cancellationToken));
+                tasks.Add(Transport.StartAsync(_cancellationToken));
                 tasks.Add(BroadcastTxAsync(broadcastTxInterval, _cancellationToken));
                 tasks.Add(ProcessFillBlocks(dialTimeout, _cancellationToken));
                 tasks.Add(ProcessFillTxs(_cancellationToken));
