@@ -15,6 +15,14 @@ To be released.
     Use `IMessageCodec<T>.Encode()` method instead.  [[#1503]]
  -  Removed `Message.Parse()` static method.
     Use `IMessageCodec<T>.Decode()` method instead.  [[#1503]]
+ -  Removed `ITransport.RunAsync()` method.
+    `ITransport.StartAsync()` now conducts operation that
+    `ITransport.RunAsync()` used to conduct.  [[#1523]]
+ -  Removed `ITransport.ReplyMessage()` method which was non-blocking.
+    Instead, added `ITransport.ReplyMessageAsync()` asynchronous method
+    which is awaited until the reply message is sent.  [[#1523]]
+ -  The type of `ITransport.ProcessMessageHandler` became
+    `AsyncDelegate<T>` (which was `EventHandler`).  [[#1523]]
  -  Removed unused `HashAlgorithmGetter` type parameter from
     `ActionEvaluator<T>()` constructor.  [[#1537]]
 
@@ -32,6 +40,16 @@ To be released.
  -  Added `IMessageCodec<T>` interface.  [[#1503]]
  -  Added `NetMQMessageCodec` class which inherits `IMessageCodec<T>`.
     [[#1503]]
+ -  Added `ITransport.MessageHistory` property.  [[#1523]]
+ -  Added `ITransport.WaitForRunning()` method.  [[#1523]]
+ -  Added `TcpTransport` class which implements `ITransport` interface.
+    [[#1523]]
+ -  Added `SwarmOptions.Type` property.  [[#1523]]
+ -  Added `SwarmOptions.TransportType` enum.  [[#1523]]
+ -  Added `AsyncDelegate<T>` class.  [[#1523]]
+ -  Added `InvalidMagicCookieException` class.  [[#1523]]
+ -  Added `MessageCodec` class which inherits `IMessageCodec<T>`.
+    [[#1523]]
  -  Added `MemoryStore` class.  [[#1544]]
  -  Added `MemoryKeyValueStore` class.  [[#1544]]
  -  Added `BlockDemandTable.Remove()` method.  [[#1549]]
@@ -65,6 +83,7 @@ To be released.
 
 [#1166]: https://github.com/planetarium/libplanet/issues/1166
 [#1503]: https://github.com/planetarium/libplanet/pull/1503
+[#1523]: https://github.com/planetarium/libplanet/pull/1523
 [#1535]: https://github.com/planetarium/libplanet/pull/1535
 [#1537]: https://github.com/planetarium/libplanet/pull/1537
 [#1544]: https://github.com/planetarium/libplanet/pull/1544
