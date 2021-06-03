@@ -5,12 +5,29 @@ using Libplanet.Blockchain;
 using Libplanet.Blocks;
 using Libplanet.Net.Messages;
 using Libplanet.Net.Protocols;
+using Libplanet.Net.Transports;
 using Libplanet.Tx;
 
 namespace Libplanet.Net
 {
     public class SwarmOptions
     {
+        /// <summary>
+        /// <c>Enum</c> represents the type of the <see cref="ITransport"/>.
+        /// </summary>
+        public enum TransportType : byte
+        {
+            /// <summary>
+            /// NetMQ based transport.
+            /// </summary>
+            NetMQTransport = 0x01,
+
+            /// <summary>
+            /// TCP based transport.
+            /// </summary>
+            TcpTransport = 0x02,
+        }
+
         /// <summary>
         /// The maximum timeout used in <see cref="Swarm{T}"/>.
         /// </summary>
@@ -110,5 +127,10 @@ namespace Libplanet.Net
         /// The maximum number of peers to poll blocks.
         /// </summary>
         public int MaximumPollPeers { get; set; } = int.MaxValue;
+
+        /// <summary>
+        /// The type of <see cref="ITransport"/> used in <see cref="Swarm{T}"/>.
+        /// </summary>
+        public TransportType Type { get; set; } = TransportType.TcpTransport;
     }
 }
