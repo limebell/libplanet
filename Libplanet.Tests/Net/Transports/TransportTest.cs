@@ -71,7 +71,7 @@ namespace Libplanet.Tests.Net.Transports
         }
 
         [SkippableFact(Timeout = Timeout)]
-        public async void Dispose()
+        public async void DisposeTest()
         {
             ITransport transport = CreateTransport();
 
