@@ -11,6 +11,7 @@ using Libplanet.Net;
 using Libplanet.Net.Messages;
 using Libplanet.Net.Protocols;
 using Libplanet.Net.Transports;
+using NetMQ;
 using Serilog;
 using Xunit;
 using Xunit.Sdk;
@@ -56,7 +57,11 @@ namespace Libplanet.Tests.Net.Transports
                 Assert.True(transport.Running);
                 await transport.StopAsync(TimeSpan.Zero);
                 Assert.False(transport.Running);
-                await Task.Delay(TimeSpan.FromSeconds(5));
+
+                if (transport is NetMQTransport)
+                {
+                    NetMQConfig.Cleanup(false);
+                }
 
                 await InitializeAsync(transport);
                 Assert.True(transport.Running);

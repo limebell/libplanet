@@ -8,14 +8,17 @@ using Libplanet.Net;
 using Libplanet.Net.Transports;
 using Libplanet.Tests.Common.Action;
 using Libplanet.Tests.Store;
+using NetMQ;
 using Xunit;
 using Xunit.Sdk;
 
 namespace Libplanet.Tests.Net.Transports
 {
+    [Collection("NetMQConfiguration")]
     public class BoundPeerExtensionsTest
     {
         [Theory(Timeout = 60 * 1000)]
+        [InlineData(SwarmOptions.TransportType.NetMQTransport)]
         [InlineData(SwarmOptions.TransportType.TcpTransport)]
         public async Task QueryAppProtocolVersion(SwarmOptions.TransportType transportType)
         {
@@ -84,6 +87,11 @@ namespace Libplanet.Tests.Net.Transports
                 {
                     await swarm.StopAsync();
                 }
+            }
+
+            if (transportType == SwarmOptions.TransportType.NetMQTransport)
+            {
+                NetMQConfig.Cleanup(false);
             }
         }
 

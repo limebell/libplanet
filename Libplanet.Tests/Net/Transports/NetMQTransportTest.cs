@@ -17,6 +17,7 @@ using Xunit.Abstractions;
 
 namespace Libplanet.Tests.Net.Transports
 {
+    [Collection("NetMQConfiguration")]
     public class NetMQTransportTest : TransportTest, IDisposable
     {
         public NetMQTransportTest(ITestOutputHelper testOutputHelper)
