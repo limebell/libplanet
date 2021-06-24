@@ -16,7 +16,6 @@ namespace Libplanet.Tests.Net.Transports
     public class BoundPeerExtensionsTest
     {
         [Theory(Timeout = 60 * 1000)]
-        [InlineData(SwarmOptions.TransportType.NetMQTransport)]
         [InlineData(SwarmOptions.TransportType.TcpTransport)]
         public async Task QueryAppProtocolVersion(SwarmOptions.TransportType transportType)
         {
