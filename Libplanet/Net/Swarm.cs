@@ -285,7 +285,7 @@ namespace Libplanet.Net
         /// a lot of calls to methods of <see cref="BlockChain{T}.Renderers"/> in a short
         /// period of time.  This can lead a game startup slow.  If you want to omit rendering of
         /// these actions in the behind blocks use <see cref=
-        /// "PreloadAsync(TimeSpan?, IProgress{PreloadState}, CancellationToken)"
+        /// "PreloadAsync(TimeSpan?, IProgress{PreloadState}, bool, CancellationToken)"
         /// /> method too.</remarks>
         public async Task StartAsync(
             int millisecondsDialTimeout = 15000,
@@ -326,7 +326,7 @@ namespace Libplanet.Net
         /// a lot of calls to methods of <see cref="BlockChain{T}.Renderers"/> in a short
         /// period of time.  This can lead a game startup slow.  If you want to omit rendering of
         /// these actions in the behind blocks use <see cref=
-        /// "PreloadAsync(TimeSpan?, IProgress{PreloadState}, CancellationToken)"
+        /// "PreloadAsync(TimeSpan?, IProgress{PreloadState}, bool, CancellationToken)"
         /// /> method too.</remarks>
         public async Task StartAsync(
             TimeSpan dialTimeout,
@@ -494,6 +494,8 @@ namespace Libplanet.Net
         /// <param name="progress">
         /// An instance that receives progress updates for block downloads.
         /// </param>
+        /// <param name="render">
+        /// The value indicates whether to render blocks and actions while preloading.</param>
         /// <param name="cancellationToken">
         /// A cancellation token used to propagate notification that this
         /// operation should be canceled.
@@ -513,6 +515,7 @@ namespace Libplanet.Net
         public async Task PreloadAsync(
             TimeSpan? dialTimeout = null,
             IProgress<PreloadState> progress = null,
+            bool render = false,
             CancellationToken cancellationToken = default(CancellationToken)
         )
         {
@@ -852,7 +855,7 @@ namespace Libplanet.Net
                         wId,
                         workspace.Tip
                     );
-                    BlockChain.Swap(workspace, render: false);
+                    BlockChain.Swap(workspace, render: render);
                 }
 
                 foreach (Guid chainId in chainIds)
