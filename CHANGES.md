@@ -163,6 +163,9 @@ To be released.
     [[#1294], [#1328]]
  -  `Swarm<T>.StartAsync()` method became to receive `broadcastBlockInterval`
     (or `millisecondsBroadcastBlockInterval`) parameter.  [[#1351]]
+ -  Added the parameter `minimumBroadcastTarget` to `NetMQTransport()`
+    constructor.  [[#1379]]
+ -  Removed `InvalidTxUpdatedAddressesException`.  [[#368], [#1389]]
 
 ### Backward-incompatible network protocol changes
 
@@ -215,8 +218,20 @@ To be released.
  -  (Libplanet.RocksDBStore) `RocksDBStore.ForkBlockIndexes()` became to share
     common ancestors between forks rather than duplicating them so that much
     less space is used.  [[#1280], [#1287]]
+<<<<<<< HEAD
  -  `Transaction<T>.Validate()` became to throw `InvalidTxSignatureException`
     if the transaction was not signed.  [[#1378]]
+=======
+ -  `BlockChain<T>.Append()` cumulates indexes for pairs (TxId and BlockHash).
+    A transaction inclusion for a block is retrievable by using this index.
+    [[#1315], [#1329]]
+ -  `ActionEvaluator<T>.EvaluateActions()` now throws an unmanaged exception
+    if `OutOfMemoryException` is caught from `IAction.Execute()`.
+    [[#1320], [#1343]]
+ -  Improved performance of broadcasting using `Swarm<T>`.  [[#1334]]
+ -  `BlockChain<T>.ExecuteActions()` became no longer throw
+    `InvalidTxUpdatedAddressesException`.  [[#368], [#1389]]
+>>>>>>> 5dc0f9d0... Delete InvalidTxUpdatedAddressesException
 
 ### Bug fixes
 
@@ -300,7 +315,16 @@ To be released.
 [#1343]: https://github.com/planetarium/libplanet/pull/1343
 [#1348]: https://github.com/planetarium/libplanet/pull/1348
 [#1351]: https://github.com/planetarium/libplanet/pull/1351
+<<<<<<< HEAD
 [#1378]: https://github.com/planetarium/libplanet/pull/1378
+=======
+[#1352]: https://github.com/planetarium/libplanet/pull/1352
+[#1353]: https://github.com/planetarium/libplanet/pull/1353
+[#1360]: https://github.com/planetarium/libplanet/pull/1360
+[#1368]: https://github.com/planetarium/libplanet/pull/1368
+[#1379]: https://github.com/planetarium/libplanet/pull/1379
+[#1389]: https://github.com/planetarium/libplanet/pull/1389
+>>>>>>> 5dc0f9d0... Delete InvalidTxUpdatedAddressesException
 
 
 Version 0.11.1

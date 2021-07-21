@@ -574,10 +574,6 @@ namespace Libplanet.Blocks
         /// <exception cref="InvalidBlockTxHashException">Thrown when
         /// the <see cref="TxHash" /> does not match with its
         /// <see cref="Transactions"/>.</exception>
-        /// <exception cref="InvalidTxUpdatedAddressesException">Thrown when
-        /// any <see cref="IAction"/> of <see cref="Transactions"/> tries
-        /// to update the states of <see cref="Address"/>es not included
-        /// in <see cref="Transaction{T}.UpdatedAddresses"/>.</exception>
         /// <exception cref="InvalidTxSignatureException">Thrown when its
         /// <see cref="Transaction{T}.Signature"/> is invalid or not signed by
         /// the account who corresponds to its <see cref="PublicKey"/>.
@@ -608,23 +604,6 @@ namespace Libplanet.Blocks
                             grp.Last().Item2.OutputStates.UpdatedAddresses
                         )
                     );
-            foreach (
-                (Transaction<T> tx, IImmutableSet<Address> updatedAddresses)
-                in txUpdatedAddressesPairs)
-            {
-                if (!tx.UpdatedAddresses.IsSupersetOf(updatedAddresses))
-                {
-                    const string msg =
-                        "Actions in the transaction try to update " +
-                        "the addresses not granted.";
-                    throw new InvalidTxUpdatedAddressesException(
-                        tx.Id,
-                        tx.UpdatedAddresses,
-                        updatedAddresses,
-                        msg
-                    );
-                }
-            }
 
             return txEvaluations.Select(te => te.Item2);
         }
