@@ -449,55 +449,6 @@ namespace Libplanet.Tests.Blocks
         }
 
         [Fact]
-        public void EvaluateInvalidTxUpdatedAddresses()
-        {
-            ImmutableArray<IValue> rawActions =
-                _fx.TxFixture.TxWithActions
-                    .ToRawTransaction(false).Actions.ToImmutableArray();
-            RawTransaction rawTxWithoutSig = new RawTransaction(
-                0,
-                _fx.TxFixture.Address1.ByteArray,
-                _fx.Genesis.Hash.ByteArray,
-                ImmutableArray<ImmutableArray<byte>>.Empty,
-                _fx.TxFixture.PublicKey1.Format(false).ToImmutableArray(),
-                DateTimeOffset.UtcNow.ToString(
-                    "yyyy-MM-ddTHH:mm:ss.ffffffZ",
-                    CultureInfo.InvariantCulture
-                ),
-                rawActions,
-                ImmutableArray<byte>.Empty
-            );
-            byte[] sig = _fx.TxFixture.PrivateKey1.Sign(
-                new Transaction<PolymorphicAction<BaseAction>>(
-                    rawTxWithoutSig
-                ).Serialize(false)
-            );
-            var invalidTx = new Transaction<PolymorphicAction<BaseAction>>(
-                new RawTransaction(
-                    0,
-                    rawTxWithoutSig.Signer,
-                    rawTxWithoutSig.GenesisHash,
-                    rawTxWithoutSig.UpdatedAddresses,
-                    rawTxWithoutSig.PublicKey,
-                    rawTxWithoutSig.Timestamp,
-                    rawTxWithoutSig.Actions,
-                    sig.ToImmutableArray()
-                )
-            );
-            Block<PolymorphicAction<BaseAction>> invalidBlock = MineNext(
-                _fx.Genesis,
-                new List<Transaction<PolymorphicAction<BaseAction>>>
-                {
-                    invalidTx,
-                }
-            );
-            Assert.Throws<InvalidTxUpdatedAddressesException>(() =>
-                invalidBlock.Evaluate(
-                    DateTimeOffset.UtcNow, _ => null, (a, c) => new FungibleAssetValue(c))
-            );
-        }
-
-        [Fact]
         public void DetectInvalidProtocolVersion()
         {
             DateTimeOffset now = DateTimeOffset.UtcNow;
