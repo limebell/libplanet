@@ -152,12 +152,13 @@ namespace Libplanet.Net.Transports
 
                 _runtimeCancellationTokenSource.Dispose();
                 _turnCancellationTokenSource.Dispose();
-                StopAllStreams();
+                StopAllStreamsAsync().Wait();
                 Running = false;
                 _disposed = true;
             }
         }
 
+        /// <inheritdoc cref="ITransport.StartAsync"/>
         public async Task StartAsync(CancellationToken cancellationToken = default)
         {
             if (_disposed)
@@ -221,7 +222,7 @@ namespace Libplanet.Net.Transports
                 await Task.Delay(waitFor, cancellationToken);
                 _listener.Stop();
                 _runtimeCancellationTokenSource.Cancel();
-                StopAllStreams();
+                await StopAllStreamsAsync();
                 Running = false;
             }
         }
@@ -577,7 +578,7 @@ namespace Libplanet.Net.Transports
                         bytesRead = await stream.ReadAsync(
                             buffer,
                             0,
-                            bytesLeft < 1000 ? bytesLeft : 1000,
+                            bytesLeft < buffer.Length ? bytesLeft : buffer.Length,
                             default);
                         content.AddRange(buffer.Take(bytesRead));
                         bytesLeft -= bytesRead;
@@ -905,15 +906,15 @@ namespace Libplanet.Net.Transports
             _logger.Verbose("Removed stream from the collection. {Id}", id);
         }
 
-        private void StopAllStreams()
+        private async Task StopAllStreamsAsync()
         {
-            List<Task> tasks = new List<Task>();
-            foreach (var id in _streams.Keys)
+            var tasks = new List<Task>();
+            foreach (Guid id in _streams.Keys)
             {
                 tasks.Add(TryRemoveStreamAsync(id, default));
             }
 
-            Task.WhenAll(tasks).Wait();
+            await Task.WhenAll(tasks);
         }
 
         private struct ReplyStream

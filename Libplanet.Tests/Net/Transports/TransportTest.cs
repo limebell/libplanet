@@ -30,7 +30,7 @@ namespace Libplanet.Tests.Net.Transports
             TransportConstructor { get; set; }
 
         [SkippableFact(Timeout = Timeout)]
-        public async void StartAsync()
+        public async Task StartAsync()
         {
             ITransport transport = CreateTransport();
 
@@ -47,7 +47,7 @@ namespace Libplanet.Tests.Net.Transports
         }
 
         [SkippableFact(Timeout = Timeout)]
-        public async void RestartAsync()
+        public async Task RestartAsync()
         {
             ITransport transport = CreateTransport();
 
@@ -72,7 +72,7 @@ namespace Libplanet.Tests.Net.Transports
         }
 
         [SkippableFact(Timeout = Timeout)]
-        public async void DisposeTest()
+        public async Task DisposeTest()
         {
             ITransport transport = CreateTransport();
 
