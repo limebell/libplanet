@@ -184,8 +184,6 @@ namespace Libplanet.Net.Transports
             {
                 _turnClient = await IceServer.CreateTurnClient(_iceServers);
                 await _turnClient.StartAsync(listenPort, cancellationToken);
-
-                _ = RefreshPermissions(_runtimeCancellationTokenSource.Token);
             }
 
             if (_turnClient is null || !_turnClient.BehindNAT)
@@ -272,11 +270,6 @@ namespace Libplanet.Net.Transports
             if (_disposed)
             {
                 throw new ObjectDisposedException(nameof(TcpTransport));
-            }
-
-            if (!(_turnClient is null) && _turnClient.BehindNAT)
-            {
-                await CreatePermission(peer);
             }
 
             if (expectedResponses < 0)
@@ -758,100 +751,6 @@ namespace Libplanet.Net.Transports
                     nameof(AcceptAsync),
                     e);
                 throw;
-            }
-        }
-
-        private async Task RefreshPermissions(CancellationToken cancellationToken)
-        {
-            TimeSpan lifetime = TurnPermissionLifetime;
-            while (!cancellationToken.IsCancellationRequested)
-            {
-                try
-                {
-                    await Task.Delay(lifetime - TimeSpan.FromMinutes(1), cancellationToken);
-                    _logger.Debug("Refreshing permissions...");
-                    await Task.WhenAll(_table.Peers.Select(CreatePermission));
-                    cancellationToken.ThrowIfCancellationRequested();
-                }
-                catch (OperationCanceledException e)
-                {
-                    _logger.Warning(e, "{FName}() is cancelled.", nameof(RefreshPermissions));
-                    throw;
-                }
-                catch (Exception e)
-                {
-                    _logger.Error(
-                        e,
-                        "An unexpected exception occurred during {FName}(): {E}",
-                        nameof(RefreshPermissions),
-                        e);
-                }
-            }
-        }
-
-        private async Task CreatePermission(BoundPeer peer)
-        {
-            if (_turnClient is null)
-            {
-                throw new TransportException(
-                    "CreatePermission should not be called when the turn client does not exists");
-            }
-
-            using var cts = new CancellationTokenSource();
-            IPAddress[] ips;
-
-            // Cancellation After 2.5 sec
-            cts.CancelAfter(2500);
-            if (peer.PublicIPAddress is null)
-            {
-                string peerHost = peer.EndPoint.Host;
-                if (IPAddress.TryParse(peerHost, out IPAddress asIp))
-                {
-                    ips = new[] { asIp };
-                }
-                else
-                {
-                    ips = await Dns.GetHostAddressesAsync(peerHost);
-                }
-            }
-            else
-            {
-                ips = new[] { peer.PublicIPAddress };
-            }
-
-            try
-            {
-                foreach (IPAddress ip in ips)
-                {
-                    var ep = new IPEndPoint(ip, peer.EndPoint.Port);
-                    if (IPAddress.IsLoopback(ip))
-                    {
-                        // This translation is only used in test case because a
-                        // seed node exposes loopback address as public address to
-                        // other node in test case
-                        ep = await _turnClient.GetMappedAddressAsync(cts.Token);
-                    }
-
-                    // FIXME Can we really ignore IPv6 case?
-                    if (ip.AddressFamily.Equals(AddressFamily.InterNetwork))
-                    {
-                        await _turnClient.CreatePermissionAsync(ep, cts.Token);
-                    }
-                }
-            }
-            catch (TaskCanceledException tce)
-            {
-                if (cts.IsCancellationRequested)
-                {
-                    _logger.Debug(
-                        tce,
-                        "Timeout occurred during {FName}",
-                        nameof(CreatePermission));
-                }
-                else
-                {
-                    throw;
-                }
             }
         }
 
