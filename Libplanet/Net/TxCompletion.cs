@@ -79,7 +79,9 @@ namespace Libplanet.Net
 
             if (!required.Any())
             {
-                _logger.Debug("No unaware transactions to receive.");
+                _logger.Debug(
+                    "[TxCompletion({Peer})] No unaware transactions to receive.",
+                    peer);
                 return;
             }
 
@@ -92,10 +94,17 @@ namespace Libplanet.Net
             if (_txSyncTasks.ContainsKey(peer))
             {
                 _logger.Debug(
-                    "[TxCompletion({Peer})] Task exists. Just add demand to the bag.",
-                    peer);
+                    "[TxCompletion({Peer})] Task already exists; " +
+                    "just adding {TxIdCount} txids to the bag.",
+                    peer,
+                    required.Count);
                 _requiredTxIds[peer] =
                     new ConcurrentBag<TxId>(_requiredTxIds[peer].Union(required));
+                _logger.Debug(
+                    "[TxCompletion({Peer})] TxIds added to the bag; " +
+                    "total of {TotalTxIdCount} txids are in the bag.",
+                    peer,
+                    _requiredTxIds[peer].Count);
             }
             else
             {
@@ -122,121 +131,146 @@ namespace Libplanet.Net
             TPeer peer,
             CancellationToken cancellationToken)
         {
-            while (_requiredTxIds[peer].Any())
+            try
             {
-                const string log =
-                    "[TxCompletion({Peer})] Starting loop of RequestTxsFromPeerAsync " +
-                    "(_requiredTxIds count: {Count})";
-                _logger.Debug(log, peer, _requiredTxIds[peer].Count);
-
-                if (cancellationToken.IsCancellationRequested)
+                while (_requiredTxIds[peer].Any())
                 {
-                    _txSyncTasks.TryRemove(peer, out _);
-                    throw new TaskCanceledException();
-                }
+                    const string log =
+                        "[TxCompletion({Peer})] Starting loop of RequestTxsFromPeerAsync " +
+                        "(_requiredTxIds count: {Count})";
+                    _logger.Debug(log, peer, _requiredTxIds[peer].Count);
 
-                try
-                {
-                    HashSet<TxId> txIds = GetRequiredTxIds(_requiredTxIds[peer]);
-                    _requiredTxIds[peer] = new ConcurrentBag<TxId>();
-                    _logger.Debug(
-                        "[TxCompletion({Peer})] Start to run _txFetcher. (count: {Count})",
-                        peer,
-                        txIds.Count);
-                    var stopWatch = new Stopwatch();
-                    stopWatch.Start();
-                    var txs = new HashSet<Transaction<TAction>>(
-                        await _txFetcher(
-                                peer,
-                                txIds,
-                                cancellationToken)
-                            .ToListAsync(cancellationToken)
-                            .AsTask());
-                    _logger.Debug(
-                        "[TxCompletion({Peer})] End of _txFetcher. (received: {Count}); " +
-                        "Time taken: {Elapsed}",
-                        peer,
-                        txs.Count,
-                        stopWatch.Elapsed);
-
-                    txs = new HashSet<Transaction<TAction>>(
-                        txs.Where(
-                            tx =>
-                            {
-                                if (_blockChain.Policy.ValidateNextBlockTx(_blockChain, tx) is null)
-                                {
-                                    return true;
-                                }
-
-                                _logger.Debug(
-                                    "[TxCompletion({Peer})] Received transaction " +
-                                    "{TxId} will not be staged " +
-                                    "since it does not follow policy.",
-                                    peer,
-                                    tx.Id);
-                                _blockChain.StagePolicy.Ignore(_blockChain, tx.Id);
-                                return false;
-                            }));
-
-                    var validTxs = new List<Transaction<TAction>>();
-                    IImmutableSet<TxId> stagedTxIds = _blockChain.GetStagedTransactionIds();
-                    foreach (var tx in txs)
+                    if (cancellationToken.IsCancellationRequested)
                     {
-                        try
+                        _txSyncTasks.TryRemove(peer, out _);
+                        throw new TaskCanceledException();
+                    }
+
+                    try
+                    {
+                        HashSet<TxId> txIds = GetRequiredTxIds(_requiredTxIds[peer]);
+                        _requiredTxIds[peer] = new ConcurrentBag<TxId>();
+                        _logger.Debug(
+                            "[TxCompletion({Peer})] Start to run _txFetcher. (count: {Count})",
+                            peer,
+                            txIds.Count);
+                        var stopWatch = new Stopwatch();
+                        stopWatch.Start();
+                        var txs = new HashSet<Transaction<TAction>>(
+                            await _txFetcher(
+                                    peer,
+                                    txIds,
+                                    cancellationToken)
+                                .ToListAsync(cancellationToken)
+                                .AsTask());
+                        _logger.Debug(
+                            "[TxCompletion({Peer})] End of _txFetcher. (received: {Count}); " +
+                            "Time taken: {Elapsed}",
+                            peer,
+                            txs.Count,
+                            stopWatch.Elapsed);
+
+                        txs = new HashSet<Transaction<TAction>>(
+                            txs.Where(
+                                tx =>
+                                {
+                                    if (_blockChain.Policy.ValidateNextBlockTx(
+                                            _blockChain,
+                                            tx) is null)
+                                    {
+                                        return true;
+                                    }
+
+                                    _logger.Debug(
+                                        "[TxCompletion({Peer})] Received transaction " +
+                                        "{TxId} will not be staged " +
+                                        "since it does not follow policy.",
+                                        peer,
+                                        tx.Id);
+                                    _blockChain.StagePolicy.Ignore(_blockChain, tx.Id);
+                                    return false;
+                                }));
+
+                        var validTxs = new List<Transaction<TAction>>();
+                        IImmutableSet<TxId> stagedTxIds = _blockChain.GetStagedTransactionIds();
+                        foreach (var tx in txs)
                         {
-                            if (!stagedTxIds.Contains(tx.Id))
+                            try
                             {
-                                _blockChain.StageTransaction(tx);
-                                validTxs.Add(tx);
+                                if (!stagedTxIds.Contains(tx.Id))
+                                {
+                                    _blockChain.StageTransaction(tx);
+                                    validTxs.Add(tx);
+                                }
+                            }
+                            catch (InvalidTxException ite)
+                            {
+                                var msg = "[TxCompletion({Peer})] Transaction {TxId} " +
+                                          "will not be staged since it is invalid.";
+                                _logger.Error(ite, msg, peer, tx.Id);
                             }
                         }
-                        catch (InvalidTxException ite)
+
+                        // To maintain the consistency of the unit tests.
+                        if (txs.Any())
                         {
-                            var msg = "[TxCompletion({Peer})] Transaction {TxId} " +
-                                      "will not be staged since it is invalid.";
-                            _logger.Error(ite, msg, peer, tx.Id);
+                            TxReceived.Set();
+                        }
+
+                        if (validTxs.Any())
+                        {
+                            _logger.Debug(
+                                "[TxCompletion({Peer})] {ValidTxCount} txs staged " +
+                                "successfully out of {TxCount}.",
+                                peer,
+                                validTxs.Count,
+                                txs.Count);
+
+                            _txBroadcaster(peer, validTxs);
+                        }
+                        else
+                        {
+                            _logger.Information(
+                                "[TxCompletion({Peer})] Failed to get " +
+                                "{TxIdCount} transactions to stage.",
+                                peer,
+                                _requiredTxIds[peer].Count);
                         }
                     }
-
-                    // To maintain the consistency of the unit tests.
-                    if (txs.Any())
+                    catch (Exception)
                     {
-                        TxReceived.Set();
-                    }
-
-                    if (validTxs.Any())
-                    {
+                        // Just ignore the exception.
                         _logger.Debug(
-                            "[TxCompletion({Peer})] {ValidTxCount} txs staged " +
-                            "successfully out of {TxCount}.",
-                            peer,
-                            validTxs.Count,
-                            txs.Count);
+                            "[TxCompletion({Peer})] Error occurred during loop and ignore.",
+                            peer);
+                    }
+                }
 
-                        _txBroadcaster(peer, validTxs);
-                    }
-                    else
-                    {
-                        _logger.Information(
-                            "[TxCompletion({Peer})] Failed to get " +
-                            "{TxIdCount} transactions to stage.",
-                            peer,
-                            _requiredTxIds[peer].Count);
-                    }
-                }
-                catch (Exception)
-                {
-                    // Just ignore the exception.
-                    _logger.Debug(
-                        "[TxCompletion({Peer})] Error occurred during loop and ignore.",
-                        peer);
-                }
+                _logger.Debug(
+                    "[TxCompletion({Peer})] Ending RequestTxsFromPeerAsync.",
+                    peer);
+                bool result = _txSyncTasks.TryRemove(peer, out _);
+                _logger.Debug(
+                    "[TxCompletion({Peer})] Removing task from dictionary; Success? {Result}.",
+                    peer,
+                    result);
             }
-
-            _logger.Debug(
-                "[TxCompletion({Peer})] Ending RequestTxsFromPeerAsync.",
-                peer);
-            _txSyncTasks.TryRemove(peer, out _);
+            catch (Exception e)
+            {
+                _logger.Error(
+                    e,
+                    "[TxCompletion({Peer})] An error occurred during {FName}.",
+                    peer,
+                    nameof(RequestTxsFromPeerAsync));
+                throw;
+            }
+            finally
+            {
+                _logger.Debug(
+                    "[TxCompletion({Peer})] End of {FName}.",
+                    peer,
+                    nameof(RequestTxsFromPeerAsync));
+            }
         }
     }
 }
