@@ -249,11 +249,12 @@ namespace Libplanet.Net
                 _logger.Debug(
                     "[TxCompletion({Peer})] Ending RequestTxsFromPeerAsync.",
                     peer);
-                bool result = _txSyncTasks.TryRemove(peer, out _);
-                _logger.Debug(
-                    "[TxCompletion({Peer})] Removing task from dictionary; Success? {Result}.",
-                    peer,
-                    result);
+                while (_txSyncTasks.ContainsKey(peer) && !_txSyncTasks.TryRemove(peer, out _))
+                {
+                    _logger.Debug(
+                        "[TxCompletion({Peer})] Removing task from dictionary failed; Retrying...",
+                        peer);
+                }
             }
             catch (Exception e)
             {
