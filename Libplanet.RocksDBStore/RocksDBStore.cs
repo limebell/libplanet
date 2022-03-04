@@ -251,7 +251,6 @@ namespace Libplanet.RocksDBStore
                         batch.Clear();
                     }
                 }
-
             }
 
             CopyIndexes(ccf, null);
