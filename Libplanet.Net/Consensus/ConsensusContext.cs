@@ -22,6 +22,7 @@ namespace Libplanet.Net.Consensus
         where T : IAction, new()
     {
         private readonly object _contextLock;
+        private readonly object _newHeightLock;
         private readonly ContextTimeoutOption _contextTimeoutOption;
 
         private readonly BlockChain<T> _blockChain;
@@ -87,6 +88,7 @@ namespace Libplanet.Net.Consensus
                 .ForContext("Source", nameof(ConsensusContext<T>));
 
             _contextLock = new object();
+            _newHeightLock = new object();
         }
 
         /// <summary>
@@ -157,70 +159,81 @@ namespace Libplanet.Net.Consensus
         /// </remarks>
         public void NewHeight(long height)
         {
-            _newHeightCts?.Cancel();
-
-            if (height != _blockChain.Tip.Index + 1)
+            lock (_newHeightLock)
             {
-                throw new InvalidHeightIncreasingException(
-                    $"{nameof(NewHeight)}: Given new height is not increasing monotonically by 1." +
-                    $" (expected: {_blockChain.Tip.Index + 1}, actual: {height})");
-            }
+                _newHeightCts?.Cancel();
 
-            BlockCommit? lastCommit = null;
-            if (_contexts.ContainsKey(height - 1))
-            {
-                lastCommit = _contexts[height - 1].CommittedRound == -1
-                    ? (BlockCommit?)null
-                    : new BlockCommit(
-                        _contexts[height - 1].VoteSet(_contexts[height - 1].CommittedRound),
-                        _blockChain.Tip.Hash);
-            }
-
-            RemoveOldContexts(height);
-            ClearOldLastCommitCache(maxSize: LastCommitClearThreshold);
-
-            if (lastCommit != null)
-            {
-                _logger.Debug(
-                    "Caching LastCommit of Height {Height}...", height - 1);
-                _blockChain.Store.PutLastCommit(lastCommit.Value);
-            }
-            else
-            {
-                BlockCommit? storedCommit = _blockChain.Store.GetLastCommit(height - 1);
-                if (storedCommit != null)
+                if (height == Height)
                 {
-                    lastCommit = storedCommit;
+                    _logger.Debug("Context of height {Height} is already running.", height);
+                    return;
+                }
+
+                if (height != _blockChain.Tip.Index + 1)
+                {
+                    throw new InvalidHeightIncreasingException(
+                        $"{nameof(NewHeight)}: Given new height is not increasing " +
+                        $"monotonically by 1. " +
+                        $"(expected: {_blockChain.Tip.Index + 1}, actual: {height})");
+                }
+
+                BlockCommit? lastCommit = null;
+                if (_contexts.ContainsKey(height - 1))
+                {
+                    lastCommit = _contexts[height - 1].CommittedRound == -1
+                        ? (BlockCommit?)null
+                        : new BlockCommit(
+                            _contexts[height - 1].VoteSet(_contexts[height - 1].CommittedRound),
+                            _blockChain.Tip.Hash);
+                }
+
+                RemoveOldContexts(height);
+                ClearOldLastCommitCache(maxSize: LastCommitClearThreshold);
+
+                if (lastCommit != null)
+                {
                     _logger.Debug(
-                        "Found cached LastCommit of Height #{Height} " +
-                        "and Round #{Round}",
-                        lastCommit.Value.Height,
-                        lastCommit.Value.Round);
+                        "Caching LastCommit of Height {Height}...",
+                        height - 1);
+                    _blockChain.Store.PutLastCommit(lastCommit.Value);
                 }
-            }
-
-            Height = height;
-
-            _logger.Debug("Start consensus for height {Height}.", Height);
-
-            lock (_contextLock)
-            {
-                if (!_contexts.ContainsKey(height))
+                else
                 {
-                    _contexts[height] = new Context<T>(
-                        this,
-                        _blockChain,
-                        height,
-                        _privateKey,
-                        _getValidators(height).ToList(),
-                        Step.Default,
-                        contextTimeoutOptions: _contextTimeoutOption);
-
-                    AttachEventHandlers(_contexts[height]);
+                    BlockCommit? storedCommit = _blockChain.Store.GetLastCommit(height - 1);
+                    if (storedCommit != null)
+                    {
+                        lastCommit = storedCommit;
+                        _logger.Debug(
+                            "Found cached LastCommit of Height #{Height} " +
+                            "and Round #{Round}",
+                            lastCommit.Value.Height,
+                            lastCommit.Value.Round);
+                    }
                 }
-            }
 
-            _contexts[height].Start(lastCommit);
+                Height = height;
+
+                _logger.Debug("Start consensus for height {Height}.", Height);
+
+                lock (_contextLock)
+                {
+                    if (!_contexts.ContainsKey(height))
+                    {
+                        _contexts[height] = new Context<T>(
+                            this,
+                            _blockChain,
+                            height,
+                            _privateKey,
+                            _getValidators(height).ToList(),
+                            Step.Default,
+                            contextTimeoutOptions: _contextTimeoutOption);
+
+                        AttachEventHandlers(_contexts[height]);
+                    }
+                }
+
+                _contexts[height].Start(lastCommit);
+            }
         }
 
         /// <summary>
