@@ -567,6 +567,13 @@ namespace Libplanet.Net
 
                 cancellationToken.ThrowIfCancellationRequested();
 
+                _logger.Verbose(
+                    "Executed totally {BlockCount} blocks, {TxCount} txs, " +
+                    "{ActionCount} actions during {TimeSpent}",
+                    actionExecutionState.TotalBlockCount,
+                    txsCount,
+                    actionsCount,
+                    spent);
                 complete = true;
             }
             finally
