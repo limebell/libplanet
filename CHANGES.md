@@ -4,7 +4,12 @@ Libplanet changelog
 Version 0.51.5
 --------------
 
-To be released.
+Released on March 29, 2023.
+
+ -  Ported changes from [Libplanet 0.50.7] release.  [[#3022]]
+
+[Libplanet 0.50.7]: https://www.nuget.org/packages/Libplanet/0.50.7
+[#3022]: https://github.com/planetarium/libplanet/pull/3022
 
 
 Version 0.51.4
@@ -12,8 +17,8 @@ Version 0.51.4
 
 Released on March 28, 2023.
 
--  Ported changes from [Libplanet 0.50.6] release.  [[#2975]]
--  Introduced a new `Initialize` system action.  [[#2975]]
+ -  Ported changes from [Libplanet 0.50.6] release.  [[#2975]]
+ -  Introduced a new `Initialize` system action.  [[#2975]]
 
 [Libplanet 0.50.6]: https://www.nuget.org/packages/Libplanet/0.50.6
 [#2975]: https://github.com/planetarium/libplanet/pull/2975
