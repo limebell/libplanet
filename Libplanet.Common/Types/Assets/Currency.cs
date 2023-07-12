@@ -72,7 +72,7 @@ namespace Libplanet.Assets
         /// <remarks>
         /// Unlike <see langword="null"/>, an empty set means <em>no one</em> can mint the currency.
         /// </remarks>
-        /// <seealso cref="IAccountStateDelta.MintAsset"/>
+        /// <seealso cref="Libplanet.State.IAccountStateDelta.MintAsset"/>
         [JsonInclude]
         public readonly IImmutableSet<Address>? Minters;
 
