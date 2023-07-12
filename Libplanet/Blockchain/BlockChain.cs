@@ -14,12 +14,13 @@ using Libplanet.Assets;
 using Libplanet.Blockchain.Policies;
 using Libplanet.Blockchain.Renderers;
 using Libplanet.Blocks;
+using Libplanet.Common;
+using Libplanet.Common.Crypto;
+using Libplanet.Common.Types.Blocks;
+using Libplanet.Common.Types.Tx;
 using Libplanet.Consensus;
-using Libplanet.Crypto;
 using Libplanet.Store;
-using Libplanet.Tx;
 using Serilog;
-using static Libplanet.State.KeyConverters;
 
 namespace Libplanet.Blockchain
 {
@@ -689,7 +690,7 @@ namespace Libplanet.Blockchain
                     GetNextTxNonce(privateKey.ToAddress()),
                     privateKey,
                     Genesis.Hash,
-                    actions,
+                    actions.Select(x => x.PlainValue),
                     maxGasPrice,
                     gasLimit,
                     updatedAddresses,

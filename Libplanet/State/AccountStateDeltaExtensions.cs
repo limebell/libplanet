@@ -3,6 +3,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using Bencodex.Types;
 using Libplanet.Assets;
+using Libplanet.Common.Crypto;
 using static Libplanet.State.KeyConverters;
 
 namespace Libplanet.State

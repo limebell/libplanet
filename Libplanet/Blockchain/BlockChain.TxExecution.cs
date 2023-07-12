@@ -5,9 +5,9 @@ using System.Globalization;
 using System.Linq;
 using Libplanet.Action;
 using Libplanet.Assets;
-using Libplanet.Blocks;
+using Libplanet.Common.Types.Blocks;
+using Libplanet.Common.Types.Tx;
 using Libplanet.State;
-using Libplanet.Tx;
 
 namespace Libplanet.Blockchain
 {

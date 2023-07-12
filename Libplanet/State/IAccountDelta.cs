@@ -3,6 +3,7 @@ using System.Diagnostics.Contracts;
 using System.Numerics;
 using Bencodex.Types;
 using Libplanet.Assets;
+using Libplanet.Common.Crypto;
 using Libplanet.Consensus;
 
 namespace Libplanet.State
