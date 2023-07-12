@@ -266,8 +266,8 @@ namespace Libplanet.Action
                         "and took {GetStateDurationMs} ms",
                         action,
                         stopwatch.ElapsedMilliseconds,
-                        ActionContext.GetStateCount.Value,
-                        ActionContext.GetStateTimer.Value?.ElapsedMilliseconds);
+                        AccountStateDeltaMetrics.GetStateCount.Value,
+                        AccountStateDeltaMetrics.GetStateTimer.Value?.ElapsedMilliseconds);
             }
             catch (OutOfMemoryException e)
             {
