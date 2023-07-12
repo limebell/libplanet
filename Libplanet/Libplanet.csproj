@@ -112,6 +112,7 @@ https://docs.libplanet.io/</Description>
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Libplanet.Action\Libplanet.Action.csproj" />
     <ProjectReference Include="..\Libplanet.Common\Libplanet.Common.csproj" />
   </ItemGroup>
 </Project>

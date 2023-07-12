@@ -5,7 +5,7 @@ using Libplanet.Common.Crypto;
 using LruCacheNet;
 using Serilog;
 
-namespace Libplanet.Blocks
+namespace Libplanet.Action.Blocks
 {
     internal class BlockStateCache
     {

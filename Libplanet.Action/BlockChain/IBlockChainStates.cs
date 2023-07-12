@@ -9,7 +9,7 @@ using Libplanet.Consensus;
 using Libplanet.State;
 using Libplanet.Store;
 
-namespace Libplanet.Blockchain
+namespace Libplanet.Action.Blockchain
 {
     /// <summary>
     /// A minimal interface to get states from a <see cref="BlockChain"/>.
