@@ -43,10 +43,12 @@ namespace Libplanet.Explorer
             services.AddSingleton<IBlockChainIndex>(
                 provider => provider.GetRequiredService<IBlockChainContext>().Index);
 
+            services.TryAddSingleton<AccountStateType>();
             services.TryAddSingleton<ActionType>();
             services.TryAddSingleton<BlockType>();
             services.TryAddSingleton<TransactionType>();
             services.TryAddSingleton<NodeStateType>();
+            services.TryAddSingleton<WorldStateType>();
             services.TryAddSingleton<BlockQuery>();
             services.TryAddSingleton<TransactionQuery>();
             services.TryAddSingleton<ExplorerQuery>();
