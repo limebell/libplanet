@@ -263,7 +263,12 @@ public class StateQueryTest
         public IAccountState GetAccountState(Address address, BlockHash? blockHash)
             => new MockAccount(address: address, blockHash: blockHash);
 
-        public ITrie GetStateRoot(BlockHash? offset)
+        public ITrie GetBlockStateRoot(BlockHash? offset)
+        {
+            throw new System.NotImplementedException();
+        }
+
+        public ITrie GetStateRoot(HashDigest<SHA256>? hash)
         {
             throw new System.NotImplementedException();
         }

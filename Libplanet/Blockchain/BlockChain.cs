@@ -6,6 +6,7 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Threading;
 using Bencodex.Types;
 using Libplanet.Action;
@@ -575,9 +576,13 @@ namespace Libplanet.Blockchain
         public IAccountState GetAccountState(Address address, BlockHash? offset) =>
             _blockChainStates.GetAccountState(address, offset);
 
-        /// <inheritdoc cref="IBlockChainStates.GetStateRoot(BlockHash?)"/>
-        public ITrie GetStateRoot(BlockHash? offset) =>
-            _blockChainStates.GetStateRoot(offset);
+        /// <inheritdoc cref="IBlockChainStates.GetBlockStateRoot(BlockHash?)"/>
+        public ITrie GetBlockStateRoot(BlockHash? offset) =>
+            _blockChainStates.GetBlockStateRoot(offset);
+
+        /// <inheritdoc cref="IBlockChainStates.GetStateRoot(HashDigest{SHA256}?)"/>
+        public ITrie GetStateRoot(HashDigest<SHA256>? hash) =>
+            _blockChainStates.GetStateRoot(hash);
 
         /// <summary>
         /// Queries the recorded <see cref="TxExecution"/> for a successful or failed

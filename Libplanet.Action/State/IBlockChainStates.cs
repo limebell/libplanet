@@ -205,6 +205,29 @@ namespace Libplanet.Action.State
         ///     </description></item>
         /// </list>
         /// </exception>
-        ITrie GetStateRoot(BlockHash? offset);
+        ITrie GetBlockStateRoot(BlockHash? offset);
+
+        /// <summary>
+        /// Returns the state root associated with <see cref="HashDigest{SHA256}"/>
+        /// <paramref name="hash"/>.
+        /// </summary>
+        /// <param name="hash">The <see cref="HashDigest{SHA256}"/> to look up in
+        /// the internally held <see cref="IStore"/>.</param>
+        /// <returns>An <see cref="ITrie"/> representing the state root associated with
+        /// <paramref name="hash"/>.</returns>
+        /// <exception cref="ArgumentException">Thrown for one of the following reasons.
+        /// <list type="bullet">
+        ///     <item><description>
+        ///         If <paramref name="hash"/> is not <see langword="null"/> and
+        ///         <paramref name="hash"/> cannot be found in <see cref="IStore"/>.
+        ///     </description></item>
+        ///     <item><description>
+        ///         If <paramref name="hash"/> is not <see langword="null"/> and
+        ///         the state root hash associated with <paramref name="hash"/>
+        ///         cannot be found in <see cref="IStateStore"/>.
+        ///     </description></item>
+        /// </list>
+        /// </exception>
+        ITrie GetStateRoot(HashDigest<SHA256>? hash);
     }
 }

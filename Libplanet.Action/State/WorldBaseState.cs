@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
 using Bencodex.Types;
+using Libplanet.Common;
 using Libplanet.Crypto;
 using Libplanet.Store.Trie;
 using Libplanet.Types.Blocks;
@@ -20,7 +22,7 @@ namespace Libplanet.Action.State
         public WorldBaseState(BlockHash? blockHash, IBlockChainStates blockChainStates)
         {
             _blockChainStates = blockChainStates;
-            _stateRoot = _blockChainStates.GetStateRoot(blockHash);
+            _stateRoot = _blockChainStates.GetBlockStateRoot(blockHash);
             BlockHash = blockHash;
             Legacy = _stateRoot
                 .Get(new[]
@@ -70,12 +72,12 @@ namespace Libplanet.Action.State
         private ITrie GetLegacyTrieOnly(Address address) =>
             address == ReservedAddresses.LegacyAccount
                 ? _stateRoot
-                : _blockChainStates.GetStateRoot(null);
+                : _blockChainStates.GetBlockStateRoot(null);
 
         private ITrie GetTrieFromBencodex(IValue? value) =>
             value is Binary stateRootHash
                 ? _blockChainStates.GetStateRoot(
-                    Types.Blocks.BlockHash.DeriveFrom(stateRootHash.ToArray()))
+                    HashDigest<SHA256>.DeriveFrom(stateRootHash.ToArray()))
                 : _blockChainStates.GetStateRoot(null);
 
         private IAccount CreateAccount(Address address, ITrie trie) =>

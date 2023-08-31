@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Security.Cryptography;
 using Bencodex.Types;
 using Libplanet.Action.State;
+using Libplanet.Common;
 using Libplanet.Crypto;
 using Libplanet.Store;
 using Libplanet.Store.Trie;
@@ -61,14 +63,33 @@ namespace Libplanet.Blockchain
         public IAccountState GetAccountState(Address address, BlockHash? offset) =>
             GetWorldState(offset).GetAccount(address);
 
-        /// <inheritdoc cref="IBlockChainStates.GetStateRoot(BlockHash?)"/>
-        public ITrie GetStateRoot(BlockHash? offset)
+        /// <inheritdoc cref="IBlockChainStates.GetBlockStateRoot(BlockHash?)"/>
+        public ITrie GetBlockStateRoot(BlockHash? offset)
         {
             if (!(offset is { } hash))
             {
                 return _stateStore.GetStateRoot(null);
             }
             else if (_store.GetStateRootHash(hash) is { } stateRootHash)
+            {
+                return GetStateRoot(stateRootHash);
+            }
+            else
+            {
+                throw new ArgumentException(
+                    $"Could not find block hash {hash} in {nameof(IStore)}.",
+                    nameof(offset));
+            }
+        }
+
+        /// <inheritdoc cref="IBlockChainStates.GetStateRoot(HashDigest{SHA256}?)"/>
+        public ITrie GetStateRoot(HashDigest<SHA256>? hash)
+        {
+            if (!(hash is { } stateRootHash))
+            {
+                return _stateStore.GetStateRoot(null);
+            }
+            else
             {
                 if (_stateStore.ContainsStateRoot(stateRootHash))
                 {
@@ -78,15 +99,9 @@ namespace Libplanet.Blockchain
                 {
                     throw new ArgumentException(
                         $"Could not find state root {stateRootHash} associated with " +
-                        $"block hash {offset} in {nameof(IStateStore)}.",
-                        nameof(offset));
+                        $"block hash {hash} in {nameof(IStateStore)}.",
+                        nameof(hash));
                 }
-            }
-            else
-            {
-                throw new ArgumentException(
-                    $"Could not find block hash {hash} in {nameof(IStore)}.",
-                    nameof(offset));
             }
         }
     }
