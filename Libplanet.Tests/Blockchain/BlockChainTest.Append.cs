@@ -271,6 +271,40 @@ namespace Libplanet.Tests.Blockchain
         }
 
         [SkippableFact]
+        public void AppendModern()
+        {
+            var genesis = _blockChain.Genesis;
+            var address1 = new Address(TestUtils.GetRandomBytes(20));
+            var address2 = new Address(TestUtils.GetRandomBytes(20));
+            var action1 = new DumbModernAction(address1, "foo");
+            var action2 = new DumbModernAction(address2, "bar");
+            var miner = new PrivateKey();
+            _blockChain.StageTransaction(
+                Transaction.Create(0, miner, genesis.Hash, new[] { action1 }.ToPlainValues()));
+            var block1 = _blockChain.ProposeBlock(
+                miner,
+                TestUtils.CreateBlockCommit(_blockChain.Tip));
+            var commit1 = TestUtils.CreateBlockCommit(block1);
+            _blockChain.Append(block1, commit1);
+            Assert.Equal(
+                "foo",
+                _blockChain.GetWorldState()
+                    .GetAccount(DumbModernAction.DumbModernAddress)
+                    .GetState(address1)?
+                    .ToString());
+            _blockChain.StageTransaction(
+                Transaction.Create(0, miner, genesis.Hash, new[] { action2 }.ToPlainValues()));
+            var block2 = _blockChain.ProposeBlock(miner, commit1);
+            _blockChain.Append(block2, TestUtils.CreateBlockCommit(block2));
+            Assert.Equal(
+                "bar",
+                _blockChain.GetWorldState()
+                    .GetAccount(DumbModernAction.DumbModernAddress)
+                    .GetState(address2)?
+                    .ToString());
+        }
+
+        [SkippableFact]
         public void AppendFailDueToInvalidBytesLength()
         {
             DumbAction[] manyActions =

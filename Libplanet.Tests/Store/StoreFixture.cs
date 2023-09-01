@@ -203,7 +203,7 @@ namespace Libplanet.Tests.Store
         public abstract void Dispose();
 
         public Transaction MakeTransaction(
-            IEnumerable<DumbAction> actions = null,
+            IEnumerable<IAction> actions = null,
             ImmutableHashSet<Address> updatedAddresses = null,
             long nonce = 0,
             PrivateKey privateKey = null,
@@ -217,7 +217,7 @@ namespace Libplanet.Tests.Store
                 nonce,
                 privateKey,
                 GenesisBlock.Hash,
-                actions?.ToPlainValues() ?? Array.Empty<DumbAction>().ToPlainValues(),
+                actions?.ToPlainValues() ?? Array.Empty<IAction>().ToPlainValues(),
                 null,
                 null,
                 updatedAddresses,
