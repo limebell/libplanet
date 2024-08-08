@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Numerics;
 using Bencodex.Types;
 using Libplanet.Crypto;
@@ -20,12 +21,14 @@ namespace Libplanet.Action.State
         /// </summary>
         public static readonly Address TotalSupplyAddress =
             new Address("1000000000000000000000000000000000000000");
+        private readonly ActivitySource _activitySource;
 
         public CurrencyAccount(ITrie trie, int worldVersion, Currency currency)
         {
             Trie = trie;
             WorldVersion = worldVersion;
             Currency = currency;
+            _activitySource = new ActivitySource("Libplanet.Action.State");
         }
 
         public ITrie Trie { get; }
@@ -36,6 +39,9 @@ namespace Libplanet.Action.State
 
         public FungibleAssetValue GetBalance(Address address, Currency currency)
         {
+            using Activity? a = _activitySource
+                .StartActivity(ActivityKind.Internal)?
+                .AddTag("Address", address.ToString());
             CheckCurrency(currency);
 #pragma warning disable SA1118  // The parameter spans multiple lines
             return FungibleAssetValue.FromRawValue(
@@ -48,6 +54,9 @@ namespace Libplanet.Action.State
 
         public FungibleAssetValue GetTotalSupply(Currency currency)
         {
+            using Activity? a = _activitySource
+                .StartActivity(ActivityKind.Internal)?
+                .AddTag("Currency", currency.ToString());
             CheckCurrency(currency);
 #pragma warning disable SA1118  // The parameter spans multiple lines
             return FungibleAssetValue.FromRawValue(
@@ -97,6 +106,11 @@ namespace Libplanet.Action.State
             Address recipient,
             FungibleAssetValue value)
         {
+            using Activity? a = _activitySource
+                .StartActivity(ActivityKind.Internal)?
+                .AddTag("Sender", sender.ToString())
+                .AddTag("Recipient", recipient.ToString())
+                .AddTag("Value", value.ToString());
             CheckCurrency(value.Currency);
             if (value.Sign <= 0)
             {
@@ -118,6 +132,11 @@ namespace Libplanet.Action.State
             Address recipient,
             FungibleAssetValue value)
         {
+            using Activity? a = _activitySource
+                .StartActivity(ActivityKind.Internal)?
+                .AddTag("Sender", sender.ToString())
+                .AddTag("Recipient", recipient.ToString())
+                .AddTag("Value", value.ToString());
             CheckCurrency(value.Currency);
             if (value.Sign <= 0)
             {
