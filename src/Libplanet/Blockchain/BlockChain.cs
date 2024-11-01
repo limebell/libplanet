@@ -215,7 +215,7 @@ namespace Libplanet.Blockchain
         /// </remarks>
         // FIXME: This should be completely replaced by IRenderer.RenderBlock() or any other
         // alternatives.
-        internal event EventHandler<(Block OldTip, Block NewTip)> TipChanged;
+        public event EventHandler<(Block OldTip, Block NewTip)> TipChanged;
 
 #pragma warning disable MEN002
         /// <summary>

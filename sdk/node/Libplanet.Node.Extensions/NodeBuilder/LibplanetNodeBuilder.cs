@@ -1,6 +1,8 @@
+using Libplanet.Node.Protocols;
 using Libplanet.Node.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Nethermind.Libp2p.Stack;
 
 namespace Libplanet.Node.Extensions.NodeBuilder;
 
@@ -37,6 +39,16 @@ public class LibplanetNodeBuilder : ILibplanetNodeBuilder
     {
         Services.AddSingleton<IValidatorService, ValidatorService>();
         _scopeList.Add("Validator");
+        return this;
+    }
+
+    public ILibplanetNodeBuilder WithPubsubSwarm()
+    {
+        Services.AddSingleton<IMessageChannel, MessageChannel>();
+        Services.AddLibp2p(builder => builder.AddAppLayerProtocol<PingPongProtocol>());
+        Services.AddScoped<PubsubSwarm>();
+        Services.AddHostedService<PubsubSwarmService>();
+        _scopeList.Add("PubsubSwarm");
         return this;
     }
 }

@@ -17,7 +17,8 @@
     <ProjectReference Include="..\..\..\src\Libplanet.Store\Libplanet.Store.csproj" />
     <ProjectReference Include="..\..\..\src\Libplanet\Libplanet.csproj" />
     <ProjectReference Include="..\..\..\src\Libplanet.Net\Libplanet.Net.csproj" />
-    <ProjectReference Include="..\..\..\..\..\suho\suho-lib9c\.Lib9c.Plugin.Shared\Lib9c.Plugin.Shared.csproj" />
+    <ProjectReference Include="..\..\..\dotnet-libp2p\src\libp2p\Libp2p\Libp2p.csproj" />
+    <ProjectReference Include="..\..\..\dotnet-libp2p\src\libp2p\Libp2p.Core\Libp2p.Core.csproj" />
   </ItemGroup>
 
 </Project>

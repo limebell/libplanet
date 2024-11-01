@@ -40,8 +40,13 @@ public static class LibplanetServicesExtensions
         services.AddSingleton<IValidateOptions<ValidatorOptions>, ValidatorOptionsValidator>();
 
         services.AddOptions<SoloOptions>()
-                .Bind(configuration.GetSection(SoloOptions.Position));
+            .Bind(configuration.GetSection(SoloOptions.Position));
         services.AddSingleton<IConfigureOptions<SoloOptions>, SoloOptionsConfigurator>();
+
+        services.AddOptions<PubsubSwarmOptions>()
+            .Bind(configuration.GetSection(PubsubSwarmOptions.Position));
+        services
+            .AddSingleton<IConfigureOptions<PubsubSwarmOptions>, PubsubSwarmOptionsConfigurator>();
 
         services.AddSingleton<PolicyService>();
         services.AddSingleton<StoreService>();
@@ -59,6 +64,12 @@ public static class LibplanetServicesExtensions
         if (configuration.IsOptionsEnabled(SoloOptions.Position))
         {
             nodeBuilder.WithSolo();
+        }
+
+        if (configuration.IsOptionsEnabled(PubsubSwarmOptions.Position))
+        {
+            Console.WriteLine("Start PubsubSwarm");
+            nodeBuilder.WithPubsubSwarm();
         }
 
         if (configuration.IsOptionsEnabled(SwarmOptions.Position))

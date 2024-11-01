@@ -4,7 +4,7 @@ using Libplanet.Types.Blocks;
 
 namespace Libplanet.Net.Messages
 {
-    internal class BlockHeaderMsg : MessageContent
+    public class BlockHeaderMsg : MessageContent
     {
         private static readonly Codec Codec = new Codec();
 

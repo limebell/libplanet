@@ -171,7 +171,8 @@ namespace Libplanet.Net.Messages
             return new Message(content, version, remote, timestamp, identity);
         }
 
-        internal static MessageContent CreateMessage(
+        #pragma warning disable
+        public static MessageContent CreateMessage(
             MessageContent.MessageType type,
             byte[][] dataframes)
         {

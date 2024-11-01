@@ -6,7 +6,7 @@ using Libplanet.Types.Blocks;
 
 namespace Libplanet.Net.Messages
 {
-    internal class GetBlockHashesMsg : MessageContent
+    public class GetBlockHashesMsg : MessageContent
     {
         public GetBlockHashesMsg(BlockLocator locator, BlockHash? stop)
         {
