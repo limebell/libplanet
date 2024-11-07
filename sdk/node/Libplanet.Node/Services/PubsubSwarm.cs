@@ -3,7 +3,6 @@ using System.Text;
 using Bencodex;
 using Libplanet.Blockchain;
 using Libplanet.Crypto;
-using Libplanet.Net;
 using Libplanet.Net.Messages;
 using Libplanet.Node.Options;
 using Libplanet.Node.Protocols;

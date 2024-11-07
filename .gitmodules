@@ -1,3 +1,0 @@
-[submodule "dotnet-libp2p"]
-	path = dotnet-libp2p
-	url = https://github.com/limebell/dotnet-libp2p.git

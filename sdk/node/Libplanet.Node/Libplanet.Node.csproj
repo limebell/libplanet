@@ -10,6 +10,8 @@
     <PackageReference Include="NJsonSchema" Version="11.0.2" />
     <PackageReference Include="NJsonSchema.CodeGeneration.CSharp" Version="11.0.2" />
     <PackageReference Include="R3" Version="1.2.6" />
+    <PackageReference Include="Nethermind.Libp2p" Version="1.0.0-preview.34" />
+    <PackageReference Include="Nethermind.Libp2p.Core" Version="1.0.0-preview.34" />
   </ItemGroup>
 
   <ItemGroup>
@@ -17,8 +19,6 @@
     <ProjectReference Include="..\..\..\src\Libplanet.Store\Libplanet.Store.csproj" />
     <ProjectReference Include="..\..\..\src\Libplanet\Libplanet.csproj" />
     <ProjectReference Include="..\..\..\src\Libplanet.Net\Libplanet.Net.csproj" />
-    <ProjectReference Include="..\..\..\dotnet-libp2p\src\libp2p\Libp2p\Libp2p.csproj" />
-    <ProjectReference Include="..\..\..\dotnet-libp2p\src\libp2p\Libp2p.Core\Libp2p.Core.csproj" />
   </ItemGroup>
 
 </Project>
