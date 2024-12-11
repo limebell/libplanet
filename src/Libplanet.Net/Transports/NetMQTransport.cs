@@ -616,6 +616,12 @@ namespace Libplanet.Net.Transports
                 {
                     if (!e.Socket.TryReceiveMultipartMessage(TimeSpan.Zero, ref raw))
                     {
+                        if (i == 0)
+                        {
+                            throw new NetMQException(
+                                "ReceiveMessage occurred but no data to receive");
+                        }
+
                         break;
                     }
 
@@ -717,8 +723,9 @@ namespace Libplanet.Net.Transports
             {
                 _logger.Error(
                     ex,
-                    "An unexpected exception occurred during {MethodName}()",
-                    nameof(ReceiveMessage));
+                    "An unexpected exception occurred during {MethodName}() {Sender}",
+                    nameof(ReceiveMessage),
+                    sender);
             }
         }
 
