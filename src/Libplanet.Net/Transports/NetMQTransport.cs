@@ -609,6 +609,7 @@ namespace Libplanet.Net.Transports
         {
             try
             {
+                _logger.Debug("{FName} has triggered. {Sender}", nameof(ReceiveMessage), sender);
                 var raw = new NetMQMessage();
 
                 // execution limit to avoid starvation.
