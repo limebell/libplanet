@@ -1,10 +1,12 @@
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Numerics;
+using System.Text.Json;
 using Bencodex;
 using Bencodex.Types;
 using Libplanet.Action;
 using Libplanet.Action.Loader;
+using Libplanet.Action.State;
 using Libplanet.Action.Sys;
 using Libplanet.Blockchain;
 using Libplanet.Blockchain.Policies;
@@ -12,6 +14,7 @@ using Libplanet.Blockchain.Renderers;
 using Libplanet.Crypto;
 using Libplanet.Node.Options;
 using Libplanet.Store;
+using Libplanet.Store.Trie;
 using Libplanet.Types.Blocks;
 using Libplanet.Types.Consensus;
 using Libplanet.Types.Tx;
@@ -51,7 +54,7 @@ internal sealed class BlockChainService(
             policyActionsRegistry: policyActionsRegistry,
             stateStore,
             actionLoader);
-        var genesisBlock = CreateGenesisBlock(genesisOptions);
+        var genesisBlock = CreateGenesisBlock(genesisOptions, stateStore);
         var policy = new BlockPolicy(
             policyActionsRegistry: policyActionsRegistry,
             blockInterval: TimeSpan.FromSeconds(8),
@@ -88,15 +91,10 @@ internal sealed class BlockChainService(
             renderers: renderers);
     }
 
-    private static Block CreateGenesisBlock(GenesisOptions genesisOptions)
+    private static Block CreateGenesisBlock(
+        GenesisOptions genesisOptions,
+        IStateStore stateStore)
     {
-        if (genesisOptions.GenesisKey != string.Empty)
-        {
-            var genesisKey = PrivateKey.FromString(genesisOptions.GenesisKey);
-            var validatorKeys = genesisOptions.Validators.Select(PublicKey.FromHex).ToArray();
-            return CreateGenesisBlock(genesisKey, validatorKeys);
-        }
-
         if (genesisOptions.GenesisBlockPath != string.Empty)
         {
             return genesisOptions.GenesisBlockPath switch
@@ -106,6 +104,29 @@ internal sealed class BlockChainService(
                 { } path => LoadGenesisBlock(path),
                 _ => throw new NotSupportedException(),
             };
+        }
+
+        if (genesisOptions.GenesisConfigurationPath != string.Empty)
+        {
+            var raw = genesisOptions.GenesisConfigurationPath switch
+            {
+                { } path when Uri.TryCreate(path, UriKind.Absolute, out var uri)
+                    => LoadConfigurationFromUri(uri),
+                { } path => LoadConfigurationFromFilePath(path),
+                _ => throw new NotSupportedException(),
+            };
+
+            return CreateGenesisBlockFromConfiguration(
+                PrivateKey.FromString(genesisOptions.GenesisKey),
+                raw,
+                stateStore);
+        }
+
+        if (genesisOptions.GenesisKey != string.Empty)
+        {
+            var genesisKey = PrivateKey.FromString(genesisOptions.GenesisKey);
+            var validatorKeys = genesisOptions.Validators.Select(PublicKey.FromHex).ToArray();
+            return CreateGenesisBlock(genesisKey, validatorKeys);
         }
 
         throw new UnreachableException("Genesis block path is not set.");
@@ -151,5 +172,79 @@ internal sealed class BlockChainService(
         var rawBlock = client.GetByteArrayAsync(genesisBlockUri).Result;
         var blockDict = (Dictionary)_codec.Decode(rawBlock);
         return BlockMarshaler.UnmarshalBlock(blockDict);
+    }
+
+    private static byte[] LoadConfigurationFromFilePath(string configurationPath)
+    {
+        return File.ReadAllBytes(Path.GetFullPath(configurationPath));
+    }
+
+    private static byte[] LoadConfigurationFromUri(Uri configurationUri)
+    {
+        using var client = new HttpClient();
+        return configurationUri.IsFile
+            ? LoadConfigurationFromFilePath(configurationUri.AbsolutePath)
+            : client.GetByteArrayAsync(configurationUri).Result;
+    }
+
+    private static Block CreateGenesisBlockFromConfiguration(
+        PrivateKey genesisKey,
+        byte[] config,
+        IStateStore stateStore)
+    {
+        Dictionary<string,  Dictionary<string, object>>? data =
+            JsonSerializer.Deserialize<Dictionary<string, Dictionary<string, object>>>(config);
+        if (data == null || data.Count == 0)
+        {
+            return BlockChain.ProposeGenesisBlock(
+                privateKey: genesisKey,
+                timestamp: DateTimeOffset.MinValue);
+        }
+
+        IWorld world = new World(new WorldBaseState(stateStore.GetStateRoot(null), stateStore));
+
+        foreach (var accountKv in data)
+        {
+            try
+            {
+                var key = new Address(accountKv.Key);
+                IAccount account = world.GetAccount(key);
+
+                foreach (var stateKv in accountKv.Value)
+                {
+                    try
+                    {
+                        account = account.SetState(
+                            new Address(stateKv.Key),
+                            (IValue)stateKv.Value);
+                    }
+                    catch (Exception)
+                    {
+                        // skip state
+                    }
+                }
+
+                world = world.SetAccount(key, account);
+            }
+            catch (Exception)
+            {
+                // skip account
+            }
+        }
+
+        var worldTrie = world.Trie;
+        foreach (var account in world.Delta.Accounts)
+        {
+            var accountTrie = stateStore.Commit(account.Value.Trie);
+            worldTrie = worldTrie.Set(
+                KeyConverters.ToStateKey(account.Key),
+                new Binary(accountTrie.Hash.ByteArray));
+        }
+
+        worldTrie = stateStore.Commit(worldTrie);
+        return BlockChain.ProposeGenesisBlock(
+            privateKey: genesisKey,
+            stateRootHash: worldTrie.Hash,
+            timestamp: DateTimeOffset.MinValue);
     }
 }
